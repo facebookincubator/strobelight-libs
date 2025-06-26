@@ -71,13 +71,13 @@ bool attachEvent(
         0 /* flags */);
     if (pfd < 0) {
       std::cerr << "Failed to open perf event on pid: " << pid
-                << " error: " << errno << std::endl;
+                << " error: " << errno << "\n";
       return false;
     }
     bl = bpf_program__attach_perf_event(prog, pfd);
     if (libbpf_get_error(bl)) {
       close(pfd);
-      std::cerr << "Failed to attach perf event on pid: " << pid << std::endl;
+      std::cerr << "Failed to attach perf event on pid: " << pid << "\n";
       return false;
     }
     links.push_back(bl);
@@ -92,13 +92,13 @@ bool attachEvent(
           0 /* flags */);
       if (pfd < 0) {
         std::cerr << "Failed to open perf event on cpu: " << i
-                  << " error: " << errno << std::endl;
+                  << " error: " << errno << "\n";
         return false;
       }
       bl = bpf_program__attach_perf_event(prog, pfd);
       if (libbpf_get_error(bl)) {
         close(pfd);
-        std::cerr << "Failed to attach perf event on cpu: " << i << std::endl;
+        std::cerr << "Failed to attach perf event on cpu: " << i << "\n";
         return false;
       }
       links.push_back(bl);
@@ -135,7 +135,7 @@ class PyStacksSample {
     ///////////////////////////////////////////////////////////////////////////
 
     if (ctx == nullptr) {
-      std::cout << "ctx pointer is null" << std::endl;
+      std::cout << "ctx pointer is null\n";
       return;
     }
 
@@ -144,7 +144,7 @@ class PyStacksSample {
     auto& pystacksMessage = event->py_msg_buffer;
 
     // do something more interesting than just printing the stack
-    std::cout << "Py Stack: \n";
+    std::cout << "Py Stack:\n";
 
     char function_name[stack_len];
     char filename[stack_len];
@@ -157,7 +157,7 @@ class PyStacksSample {
       std::cout << fmt::format(
           "    {} ({}:{})\n", function_name, filename, line);
     }
-    std::cout << std::endl;
+    std::cout << "\n";
 
     ///////////////////////////////////////////////////////////////////////////
     // } Stack Reader Processing //////////////////////////////////////////////
@@ -165,17 +165,17 @@ class PyStacksSample {
   }
 
   static void handleLostSamplesCallback(void* /*ctx*/, int cpu, __u64 cnt) {
-    std::cout << "LOST SAMPLE " << cpu << " " << cnt << std::endl;
+    std::cout << "LOST SAMPLE " << cpu << " " << cnt << "\n";
   }
 
   int run(pid_t pid) {
-    std::cout << "Profile PID: " << pid << std::endl;
+    std::cout << "Profile PID: " << pid << "\n";
     std::vector<bpf_link*> links;
 
     auto bpfSkel = pystacks_sample__open_and_load();
 
     if (!bpfSkel) {
-      std::cerr << "Failed to create skeleton" << std::endl;
+      std::cerr << "Failed to create skeleton\n";
       return 1;
     }
 
@@ -197,7 +197,7 @@ class PyStacksSample {
 
     auto samplesFd = bpf_map__fd(bpfSkel->maps.samples);
     if (samplesFd < 0) {
-      std::cerr << "Failed to load samples map" << std::endl;
+      std::cerr << "Failed to load samples map\n";
       return 1;
     }
 
@@ -210,16 +210,15 @@ class PyStacksSample {
         nullptr);
 
     if (!samplesBuf) {
-      std::cerr << "Failed to open 'samplesBuf' perf buffer: " << errno
-                << std::endl;
+      std::cerr << "Failed to open 'samplesBuf' perf buffer: " << errno << "\n";
       return 1;
     }
 
     std::cout << "Opened 'samplesBuf' perf buffer with " << perfBufSizePages
-              << " " << "pages per CPU" << std::endl;
+              << " pages per CPU\n";
 
     if (!attachEvent(bpfSkel->progs.on_py_event, links, pid)) {
-      std::cerr << "Init fail: failed to attach perf event" << std::endl;
+      std::cerr << "Init fail: failed to attach perf event\n";
       return 1;
     }
 

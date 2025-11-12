@@ -39,9 +39,14 @@ struct stack_walker_run {
 
   bool manualSymbolRefresh_{};
 
-  std::shared_ptr<facebook::pid_info::SharedPidInfoCache> pidInfoCache_;
+  // IMPORTANT: pyProcessDiscovery_ must be declared before pidInfoCache_
+  // because C++ destroys members in reverse declaration order.
+  // pyProcessDiscovery_ holds references to OffsetResolver objects that may
+  // be managed by pidInfoCache_, so pyProcessDiscovery_ must be destroyed first
+  // while pidInfoCache_ is still valid.
   std::shared_ptr<facebook::strobelight::bpf_lib::python::PyProcessDiscovery>
       pyProcessDiscovery_;
+  std::shared_ptr<facebook::pid_info::SharedPidInfoCache> pidInfoCache_;
   std::vector<std::string> moduleIdentifierKeywords_;
 
   std::shared_mutex mapsMutex_;

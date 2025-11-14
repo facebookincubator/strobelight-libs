@@ -112,7 +112,7 @@ void PyProcessDiscovery::discoverAndConfigure(
         strobelight_lib_print(
             STROBELIGHT_LIB_INFO,
             fmt::format("No python runtime info for process {}", pid).c_str());
-        return;
+        continue;
       }
 
       bool targeted = true;

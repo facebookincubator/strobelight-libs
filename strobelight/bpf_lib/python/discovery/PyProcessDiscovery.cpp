@@ -112,7 +112,7 @@ void PyProcessDiscovery::discoverAndConfigure(
         strobelight_lib_print(
             STROBELIGHT_LIB_INFO,
             fmt::format("No python runtime info for process {}", pid).c_str());
-        return;
+        continue;
       }
 
       bool targeted = true;
@@ -577,18 +577,15 @@ PyProcessDiscovery::getPyModuleInfo(
     if (data.offsets.PyVersion_major == 3 &&
         data.offsets.PyVersion_minor >= 7) {
       data.py_runtime_addr = pyRuntimeAddr;
-      // For modern Python (>= 3.7) we use offsets computed from _PyRuntime:
-      // TLSKey_offset: offsetof(_PyRuntimeState, gilstate.autoTSSkey._key)
-      data.tls_key_addr = pyRuntimeAddr + data.offsets.TLSKey_offset;
-      // TCurrentState_offset: offsetof(_PyRuntimeState,
-      // gilstate.tstate_current)
       data.current_state_addr =
           pyRuntimeAddr + data.offsets.TCurrentState_offset;
-      // The GIL locked address/last holder is calculated as an offset after
-      // Python3.7
       data.gil_locked_addr = pyRuntimeAddr + data.offsets.PyGIL_offset;
       data.gil_last_holder_addr =
           pyRuntimeAddr + data.offsets.PyGIL_last_holder;
+
+      if (data.offsets.TLSKey_offset != BPF_LIB_DEFAULT_FIELD_OFFSET) {
+        data.tls_key_addr = pyRuntimeAddr + data.offsets.TLSKey_offset;
+      }
     }
     data.use_tls = (data.tls_key_addr > 0);
 

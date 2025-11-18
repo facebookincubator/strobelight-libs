@@ -867,16 +867,4 @@ PyPidData PyProcessDiscovery::computePyPidData(
   return pidData;
 }
 
-const char* PyProcessDiscovery::getPyInterpreterName(
-    PyInterpreter interpreter) {
-  switch (interpreter) {
-    case PY_INTERPRETER_CPYTHON:
-      return "cpython";
-    case PY_INTERPRETER_CINDER:
-      return "cinder";
-    default:
-      return "unknown";
-  }
-}
-
 } // namespace facebook::strobelight::bpf_lib::python

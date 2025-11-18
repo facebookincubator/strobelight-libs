@@ -12,14 +12,19 @@
 #include "strobelight/bpf_lib/util/pid_info/SharedPidInfo.h"
 #include "strobelight/bpf_lib/util/pid_info/SharedPidInfoCache.h"
 
+#include "strobelight/bpf_lib/python/include/IPyProcessDiscovery.h"
 #include "strobelight/bpf_lib/python/include/PyPidData.h"
 
 #include "strobelight/bpf_lib/python/discovery/OffsetResolver.h"
 
 namespace facebook::strobelight::bpf_lib::python {
 
-class PyProcessDiscovery {
+class PyProcessDiscovery : public facebook::strobelight::IPyProcessDiscovery {
  public:
+  // Type aliases for interface types to maintain backward compatibility
+  using PyInterpreter = IPyProcessDiscovery::PyInterpreter;
+  using PyRuntimeInfo = IPyProcessDiscovery::PyRuntimeInfo;
+
   // default c-tor to allow creation outside of intializer list
   explicit PyProcessDiscovery() : processOffsetResolution_(true) {}
 
@@ -39,12 +44,12 @@ class PyProcessDiscovery {
       facebook::pid_info::SharedPidInfo& pidInfo,
       bool forceUpdate = false);
 
-  bool updatePidConfigTable(int mapFd) const;
-  bool updatePidConfigTableForPid(int mapFd, pid_t pid) const;
+  bool updatePidConfigTable(int mapFd) const override;
+  bool updatePidConfigTableForPid(int mapFd, pid_t pid) const override;
 
-  void updateBinaryIdConfigTable(int mapFd) const;
+  void updateBinaryIdConfigTable(int mapFd) const override;
 
-  std::set<pid_t> getPythonPids() const {
+  std::set<pid_t> getPythonPids() const override {
     std::set<pid_t> ret;
     std::shared_lock<std::shared_mutex> rlock(pythonPidsMutex_);
     ret.insert(pythonPids_.begin(), pythonPids_.end());
@@ -53,24 +58,7 @@ class PyProcessDiscovery {
 
   std::optional<PyPidData> getPythonPidData(pid_t pid) const;
 
-  enum PyInterpreter {
-    PY_INTERPRETER_NONE = 0,
-    PY_INTERPRETER_CPYTHON = 1,
-    PY_INTERPRETER_CINDER = 2,
-  };
-
-  struct PyRuntimeInfo {
-    PyInterpreter interpreter;
-    std::string path;
-    int versionMajor;
-    int versionMinor;
-    int versionMicro;
-
-    std::string version() {
-      return fmt::format("{}.{}.{}", versionMajor, versionMinor, versionMicro);
-    }
-  };
-  std::optional<PyRuntimeInfo> getPyRuntimeInfo(pid_t pid) const;
+  std::optional<PyRuntimeInfo> getPyRuntimeInfo(pid_t pid) const override;
 
   std::unordered_map<std::string, uint32_t> getOffsetResolutionCounts() const {
     std::unordered_map<std::string, uint32_t> res;
@@ -80,8 +68,6 @@ class PyProcessDiscovery {
 
     return res;
   }
-
-  static const char* getPyInterpreterName(PyInterpreter interpreter);
 
  private:
   mutable std::shared_mutex pythonPidsMutex_;

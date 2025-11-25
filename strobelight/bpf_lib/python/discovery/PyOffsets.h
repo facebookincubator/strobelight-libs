@@ -12,6 +12,9 @@ extern const OffsetConfig kCinder310OffsetConfig;
 // @dep=//strobelight/bpf_lib/python/discovery:py312_offset
 extern const OffsetConfig kPy312OffsetConfig;
 
+// @dep=//strobelight/bpf_lib/python/discovery:py311_offset
+extern const OffsetConfig kPy311OffsetConfig;
+
 // @dep=//strobelight/bpf_lib/python/discovery:py310_offset
 extern const OffsetConfig kPy310OffsetConfig;
 

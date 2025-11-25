@@ -175,8 +175,9 @@ const OffsetConfig& OffsetResolver::getHeaderOffsetsForVersion(
           {std::string_view("cpython-38"), kPy38OffsetConfig},
           {std::string_view("cpython-39"), kPy39OffsetConfig},
           {std::string_view("cpython-310"), kPy310OffsetConfig},
+          {std::string_view("cpython-311"), kPy311OffsetConfig},
           {std::string_view("cpython-312"), kPy312OffsetConfig},
-          {kPyOffsetDefaultKey, kPy38OffsetConfig}};
+          {kPyOffsetDefaultKey, kPy312OffsetConfig}};
 
   auto oc = pythonOffsets.find(versionString);
   if (oc == pythonOffsets.end()) {

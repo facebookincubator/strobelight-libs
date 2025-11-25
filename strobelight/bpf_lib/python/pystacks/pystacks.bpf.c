@@ -511,7 +511,7 @@ static __always_inline void* get_code_ptr(
   }
   // If we aren't using shadow frames then the frame pointer is a PyFrameObject
   else {
-    if (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 12) {
+    if (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 11) {
       result = bpf_probe_read_user_task(
           &code_ptr,
           sizeof(void*),
@@ -564,7 +564,7 @@ __noinline bool pystacks_get_frame_data(int pid) {
   int ret_code = 0;
 
   // read next PyFrameObject/PyShadowFrame pointer
-  if (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 12) {
+  if (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 11) {
     ret_code = bpf_probe_read_user_task(
         &state->frame_ptr,
         sizeof(void*),

@@ -1,6 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
-#include "strobelight/bpf_lib/python/include/IPyProcessDiscovery.h"
+#include "strobelight/bpf_lib/python/discovery/IPyProcessDiscovery.h"
 
 namespace facebook::strobelight {
 

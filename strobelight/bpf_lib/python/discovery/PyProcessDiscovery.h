@@ -12,7 +12,7 @@
 #include "strobelight/bpf_lib/util/pid_info/SharedPidInfo.h"
 #include "strobelight/bpf_lib/util/pid_info/SharedPidInfoCache.h"
 
-#include "strobelight/bpf_lib/python/include/IPyProcessDiscovery.h"
+#include "strobelight/bpf_lib/python/discovery/IPyProcessDiscovery.h"
 #include "strobelight/bpf_lib/python/include/PyPidData.h"
 
 #include "strobelight/bpf_lib/python/discovery/OffsetResolver.h"

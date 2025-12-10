@@ -30,14 +30,6 @@ class PyProcessDiscovery : public facebook::strobelight::IPyProcessDiscovery {
 
   void findPythonPids(const std::set<pid_t>& pids);
 
-  // Long term we should make these maps sharable between the different bpf
-  // modules.
-  void discoverAndConfigure(
-      std::set<pid_t> pids,
-      int pidMapFd,
-      int exeMapFd,
-      int pidTargetMapFd);
-
   std::optional<bool> isPyProcess(const pid_t pid) const;
 
   bool checkPyProcess(

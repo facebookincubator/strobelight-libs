@@ -93,49 +93,6 @@ void PyProcessDiscovery::findPythonPids(const std::set<pid_t>& pids) {
           .c_str());
 }
 
-void PyProcessDiscovery::discoverAndConfigure(
-    std::set<pid_t> pids,
-    int pidMapFd,
-    int exeMapFd,
-    int pidTargetMapFd) {
-  // find pids and load them into pythonPids_ vector
-  findPythonPids(pids);
-
-  int attached_pid_count = 0;
-
-  // Add known target Python pids at start of profiling.
-  for (pid_t pid : getPythonPids()) {
-    auto pidInfo = pidInfoCache_->get(pid);
-    if (pidInfo) {
-      const auto pyInfo = getPyRuntimeInfo(pid);
-      if (!pyInfo) {
-        strobelight_lib_print(
-            STROBELIGHT_LIB_INFO,
-            fmt::format("No python runtime info for process {}", pid).c_str());
-        continue;
-      }
-
-      bool targeted = true;
-      if (bpf_map_update_elem(pidTargetMapFd, &pid, &targeted, BPF_ANY) != 0) {
-        strobelight_lib_print(
-            STROBELIGHT_LIB_INFO,
-            fmt::format(
-                "Failed to add process {} to pid target map {}",
-                pid,
-                pidTargetMapFd)
-                .c_str());
-      }
-    }
-
-    attached_pid_count++;
-  }
-
-  if (attached_pid_count > 0) {
-    updatePidConfigTable(pidMapFd);
-    updateBinaryIdConfigTable(exeMapFd);
-  }
-}
-
 bool PyProcessDiscovery::checkPyProcess(
     facebook::pid_info::SharedPidInfo& pidInfo,
     bool forceUpdate) {

@@ -8,6 +8,8 @@
 
 #include <fmt/ostream.h>
 #include <iterator>
+#include <optional>
+#include <set>
 #include <vector>
 
 #include <algorithm>
@@ -22,6 +24,8 @@ extern "C" {
 
 #include <string>
 #include "strobelight/bpf_lib/include/FunctionSource.h"
+
+#include "strobelight/bpf_lib/python/discovery/IPyProcessDiscovery.h"
 #include "strobelight/bpf_lib/python/discovery/PyProcessDiscovery.h"
 #include "strobelight/bpf_lib/python/include/PySymbolStructs.h"
 #include "strobelight/bpf_lib/python/include/structs.h"
@@ -44,7 +48,7 @@ struct stack_walker_run {
   // pyProcessDiscovery_ holds references to OffsetResolver objects that may
   // be managed by pidInfoCache_, so pyProcessDiscovery_ must be destroyed first
   // while pidInfoCache_ is still valid.
-  std::shared_ptr<facebook::strobelight::bpf_lib::python::PyProcessDiscovery>
+  std::shared_ptr<facebook::strobelight::IPyProcessDiscovery>
       pyProcessDiscovery_;
   std::shared_ptr<facebook::pid_info::SharedPidInfoCache> pidInfoCache_;
   std::vector<std::string> moduleIdentifierKeywords_;
@@ -420,6 +424,8 @@ PySymbolLookupResult resolvePySymbol(
   return result;
 }
 
+using facebook::strobelight::bpf_lib::python::FunctionSource;
+
 FunctionSource resolvePySource(
     struct stack_walker_run* run,
     const struct stack_walker_frame& frame) {
@@ -489,13 +495,31 @@ struct stack_walker_run* pystacks_init(
   run->pidInfoCache_ = facebook::pid_info::getSharedPidInfoCache(),
 
   run->skel_->bss.pid_target_helpers_prog_cfg->has_targeted_pids = true;
-  run->pyProcessDiscovery_ = std::make_shared<
+
+  auto ppd = std::make_shared<
       facebook::strobelight::bpf_lib::python::PyProcessDiscovery>();
-  run->pyProcessDiscovery_->discoverAndConfigure(
-      pidSet,
-      bpf_map__fd(run->skel_->maps.pystacks_pid_config),
-      bpf_map__fd(run->skel_->maps.pystacks_binaryid_config),
-      bpf_map__fd(run->skel_->maps.targeted_pids));
+  ppd->findPythonPids(pidSet);
+
+  run->pyProcessDiscovery_ = ppd;
+
+  size_t attached_pid_count = 0;
+  for (pid_t pid : run->pyProcessDiscovery_->getPythonPids()) {
+    bool targeted = true;
+    if (bpf_map_update_elem(
+            bpf_map__fd(run->skel_->maps.targeted_pids),
+            &pid,
+            &targeted,
+            BPF_ANY) == 0) {
+      attached_pid_count++;
+    }
+  }
+
+  if (attached_pid_count > 0) {
+    run->pyProcessDiscovery_->updatePidConfigTable(
+        bpf_map__fd(run->skel_->maps.pystacks_pid_config));
+    run->pyProcessDiscovery_->updateBinaryIdConfigTable(
+        bpf_map__fd(run->skel_->maps.pystacks_binaryid_config));
+  }
 
   strobelight_lib_print(
       STROBELIGHT_LIB_INFO,

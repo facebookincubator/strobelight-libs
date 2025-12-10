@@ -6,7 +6,7 @@
 
 #include "strobelight/bpf_lib/util/pid_info/ProcPidInfo.h" // @manual
 
-namespace facebook::pid_info {
+namespace facebook::strobelight::bpf_lib::pid_info {
 
 // this is the bpf_lib specific implementation of SharedPidInfo
 // and can have all the types specified. The only thing that needs be generic
@@ -88,4 +88,4 @@ class SharedPidInfo {
   pid_info::ProcPidInfo internalPidInfo_;
 };
 
-} // namespace facebook::pid_info
+} // namespace facebook::strobelight::bpf_lib::pid_info

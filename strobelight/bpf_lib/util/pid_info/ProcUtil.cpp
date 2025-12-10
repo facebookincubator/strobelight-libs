@@ -12,7 +12,7 @@
 #include "strobelight/bpf_lib/util/BpfLibLogger.h"
 #include "strobelight/bpf_lib/util/pid_info/ProcPidInfo.h"
 
-namespace facebook::pid_info {
+namespace facebook::strobelight::bpf_lib::pid_info {
 
 using std::map;
 using std::string;
@@ -196,4 +196,4 @@ bool haveEffectiveSysAdminCapability() {
   return result;
 }
 
-} // namespace facebook::pid_info
+} // namespace facebook::strobelight::bpf_lib::pid_info

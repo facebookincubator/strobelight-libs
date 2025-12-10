@@ -67,7 +67,9 @@ void PyProcessDiscovery::findPythonPids(const std::set<pid_t>& pids) {
 
   std::vector<VoidPidCallback> discoveryCbs;
   discoveryCbs.emplace_back(
-      [&](facebook::pid_info::SharedPidInfo& pidInfo) -> void {
+      [&](std::shared_ptr<
+          facebook::strobelight::bpf_lib::pid_info::SharedPidInfo>& pidInfo)
+          -> void {
         checkPyProcess(pidInfo);
         ++pidCount;
       });
@@ -94,17 +96,18 @@ void PyProcessDiscovery::findPythonPids(const std::set<pid_t>& pids) {
 }
 
 bool PyProcessDiscovery::checkPyProcess(
-    facebook::pid_info::SharedPidInfo& pidInfo,
+    std::shared_ptr<facebook::strobelight::bpf_lib::pid_info::SharedPidInfo>&
+        pidInfo,
     bool forceUpdate) {
   if (forceUpdate) {
-    clearPythonPidData(pidInfo.getPid());
+    clearPythonPidData(pidInfo->getPid());
   } else {
-    auto result = isPyProcess(pidInfo.getPid());
+    auto result = isPyProcess(pidInfo->getPid());
     if (result.has_value()) {
       return *result;
     }
   }
-  return checkPyProcessImpl(pidInfo);
+  return checkPyProcessImpl(*pidInfo);
 }
 
 bool PyProcessDiscovery::updatePidConfigTable(int mapFd) const {
@@ -254,7 +257,7 @@ PyProcessDiscovery::getPyRuntimeInfo(pid_t pid) const {
 // appropriate offsets into runtime datastructures that will be needed to walk
 // Python stacks at profile time from bpf.
 bool PyProcessDiscovery::checkPyProcessImpl(
-    facebook::pid_info::SharedPidInfo& pidInfo) {
+    facebook::strobelight::bpf_lib::pid_info::SharedPidInfo& pidInfo) {
   const auto pid = pidInfo.getPid();
 
   // Iterate over all memory mappings in the process to find the Python runtime
@@ -270,13 +273,13 @@ bool PyProcessDiscovery::checkPyProcessImpl(
   PyPidData pidData;
   binary_id pyModuleBinaryId;
   try {
-    pidInfo.iterateAllMemoryMappings([&](const facebook::pid_info::
-                                             MemoryMapping& mm,
+    pidInfo.iterateAllMemoryMappings([&](const facebook::strobelight::bpf_lib::
+                                             pid_info::MemoryMapping& mm,
                                          std::optional<uintptr_t> baseLoadAddr,
                                          const std::shared_ptr<
                                              strobelight::ElfFile>& elf) {
       if (!baseLoadAddr || !elf) {
-        return facebook::pid_info::IterControl::CONTINUE;
+        return facebook::strobelight::bpf_lib::pid_info::IterControl::CONTINUE;
       }
 
       // Only check each module once. In the /proc/<pid>/maps listing there
@@ -284,7 +287,7 @@ bool PyProcessDiscovery::checkPyProcessImpl(
       // different memory protections.
       const bool checked = !checkedModules.insert(mm.name).second;
       if (checked) {
-        return facebook::pid_info::IterControl::CONTINUE;
+        return facebook::strobelight::bpf_lib::pid_info::IterControl::CONTINUE;
       }
 
       const bool isPie = elf->isPie();
@@ -356,9 +359,9 @@ bool PyProcessDiscovery::checkPyProcessImpl(
         found = true;
       }
       if (offsetResolver.allProcessOffsetsFound()) {
-        return facebook::pid_info::IterControl::BREAK;
+        return facebook::strobelight::bpf_lib::pid_info::IterControl::BREAK;
       }
-      return facebook::pid_info::IterControl::CONTINUE;
+      return facebook::strobelight::bpf_lib::pid_info::IterControl::CONTINUE;
     });
   } catch (const std::exception& e) {
     strobelight_lib_print(

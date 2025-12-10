@@ -9,9 +9,10 @@ namespace facebook::strobelight::bpf_lib {
 
 enum PidIterControl : int { CONTINUE, BREAK };
 
-typedef std::function<PidIterControl(pid_info::SharedPidInfo& pidInfo)>
-    PidCallback;
-typedef std::function<void(pid_info::SharedPidInfo& pidInfo)> VoidPidCallback;
+using PidCallback =
+    std::function<PidIterControl(std::shared_ptr<pid_info::SharedPidInfo>&)>;
+using VoidPidCallback =
+    std::function<void(std::shared_ptr<pid_info::SharedPidInfo>&)>;
 
 /* Use in combination with iteratePids when doing typical 'discovery'
  * phase where all pids are examined by independent discovery logic e.g.:

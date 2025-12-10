@@ -14,7 +14,7 @@
 static constexpr std::string_view kAnonHugePage = "/anon_hugepage";
 static constexpr std::string_view kDeleted = " (deleted)";
 
-namespace facebook::pid_info {
+namespace facebook::strobelight::bpf_lib::pid_info {
 
 // Resolving from proc maps is trickier than just resolving the main exe
 // directly, due to non-fixed load addresses. The basic algorithm used is as
@@ -410,4 +410,4 @@ MemoryMappingElfInfo::MemoryMappingElfInfo(
   }
 }
 
-} // namespace facebook::pid_info
+} // namespace facebook::strobelight::bpf_lib::pid_info

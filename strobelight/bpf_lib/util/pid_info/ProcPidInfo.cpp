@@ -74,7 +74,7 @@ size_t readFile(const std::string& filename, std::string& output) {
 
 } // namespace
 
-namespace facebook::pid_info {
+namespace facebook::strobelight::bpf_lib::pid_info {
 
 namespace fs = std::filesystem;
 
@@ -1254,4 +1254,4 @@ bool ProcPidInfo::readPidListFromDirectory(
   return result.size() > 0;
 }
 
-} // namespace facebook::pid_info
+} // namespace facebook::strobelight::bpf_lib::pid_info

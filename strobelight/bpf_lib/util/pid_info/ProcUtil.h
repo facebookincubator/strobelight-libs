@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <vector>
 
-namespace facebook::pid_info {
+namespace facebook::strobelight::bpf_lib::pid_info {
 
 struct BuildInfo;
 struct BinaryInfo;
@@ -63,4 +63,4 @@ std::filesystem::path buildProcRelativePath(
 
 bool haveEffectiveSysAdminCapability();
 
-} // namespace facebook::pid_info
+} // namespace facebook::strobelight::bpf_lib::pid_info

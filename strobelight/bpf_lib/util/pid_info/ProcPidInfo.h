@@ -18,8 +18,7 @@
 
 #include <strobelight/bpf_lib/util/ElfFile.h>
 
-namespace facebook {
-namespace pid_info {
+namespace facebook::strobelight::bpf_lib::pid_info {
 
 enum class ParStyle { NONE, ZIP, FASTZIP, XAR };
 
@@ -383,6 +382,4 @@ class ProcPidInfo {
   bool validInfo_;
 };
 
-} // namespace pid_info
-
-} // namespace facebook
+} // namespace facebook::strobelight::bpf_lib::pid_info

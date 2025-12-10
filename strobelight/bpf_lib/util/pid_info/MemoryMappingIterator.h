@@ -13,7 +13,7 @@
 
 #include "strobelight/bpf_lib/util/pid_info/ProcPidInfo.h"
 
-namespace facebook::pid_info {
+namespace facebook::strobelight::bpf_lib::pid_info {
 
 struct MemoryMapping;
 
@@ -96,4 +96,4 @@ class MemoryMappingIterator {
   void next();
 };
 
-} // namespace facebook::pid_info
+} // namespace facebook::strobelight::bpf_lib::pid_info

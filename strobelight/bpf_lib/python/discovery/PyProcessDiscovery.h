@@ -33,7 +33,8 @@ class PyProcessDiscovery : public facebook::strobelight::IPyProcessDiscovery {
   std::optional<bool> isPyProcess(const pid_t pid) const;
 
   bool checkPyProcess(
-      facebook::pid_info::SharedPidInfo& pidInfo,
+      std::shared_ptr<facebook::strobelight::bpf_lib::pid_info::SharedPidInfo>&
+          pidInfo,
       bool forceUpdate = false);
 
   bool updatePidConfigTable(int mapFd) const override;
@@ -92,10 +93,12 @@ class PyProcessDiscovery : public facebook::strobelight::IPyProcessDiscovery {
   bool processOffsetResolution_;
   std::unordered_map<std::string, uint32_t> offsetResolutionCounts_;
 
-  std::shared_ptr<facebook::pid_info::SharedPidInfoCache> pidInfoCache_ =
-      facebook::pid_info::getSharedPidInfoCache();
+  std::shared_ptr<facebook::strobelight::bpf_lib::pid_info::SharedPidInfoCache>
+      pidInfoCache_ =
+          facebook::strobelight::bpf_lib::pid_info::getSharedPidInfoCache();
 
-  bool checkPyProcessImpl(facebook::pid_info::SharedPidInfo& pidInfo);
+  bool checkPyProcessImpl(
+      facebook::strobelight::bpf_lib::pid_info::SharedPidInfo& pidInfo);
 
   bool clearPythonPidData(const pid_t pid);
 

@@ -13,7 +13,7 @@
 
 #include "strobelight/bpf_lib/util/pid_info/SharedPidInfo.h"
 
-namespace facebook::pid_info {
+namespace facebook::strobelight::bpf_lib::pid_info {
 
 // Thread-safe cache on top of SharedPidInfo objects. The main difference
 // between this class and the original pid_info::PidInfoCache is that this class
@@ -87,4 +87,4 @@ class SharedPidInfoCache {
 
 std::shared_ptr<SharedPidInfoCache> getSharedPidInfoCache();
 
-} // namespace facebook::pid_info
+} // namespace facebook::strobelight::bpf_lib::pid_info

@@ -11,12 +11,13 @@ namespace facebook::strobelight::bpf_lib {
 
 PidCallback chainDiscoveryCallbacks(
     const std::vector<VoidPidCallback>& callbacks) {
-  return [&](pid_info::SharedPidInfo& pidInfo) -> PidIterControl {
-    for (const auto& cb : callbacks) {
-      cb(pidInfo);
-    }
-    return PidIterControl::CONTINUE;
-  };
+  return
+      [&](std::shared_ptr<pid_info::SharedPidInfo>& pidInfo) -> PidIterControl {
+        for (const auto& cb : callbacks) {
+          cb(pidInfo);
+        }
+        return PidIterControl::CONTINUE;
+      };
 }
 
 void iteratePids(
@@ -25,7 +26,7 @@ void iteratePids(
     const std::string& chrootDir) {
   auto pids = !targetedPids.empty()
       ? std::vector<pid_t>((targetedPids).begin(), (targetedPids).end())
-      : facebook::pid_info::SharedPidInfo::getRunningPids(chrootDir);
+      : pid_info::SharedPidInfo::getRunningPids(chrootDir);
 
   auto pidInfoCache = chrootDir.empty()
       ? pid_info::getSharedPidInfoCache()
@@ -36,7 +37,7 @@ void iteratePids(
     if (!pidInfo || !pidInfo->isAlive()) {
       continue;
     }
-    if (callback(*pidInfo) == PidIterControl::BREAK) {
+    if (callback(pidInfo) == PidIterControl::BREAK) {
       break;
     }
   }

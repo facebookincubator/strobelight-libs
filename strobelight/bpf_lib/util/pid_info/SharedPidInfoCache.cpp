@@ -7,7 +7,7 @@
 
 #include <utility>
 
-namespace facebook::pid_info {
+namespace facebook::strobelight::bpf_lib::pid_info {
 
 // PIDs can be reused. We assume they will not be reused within 1h.
 constexpr std::chrono::hours kCheckPidReuseInterval{1};
@@ -98,4 +98,4 @@ size_t SharedPidInfoCache::removeUnused(
   return removed;
 }
 
-} // namespace facebook::pid_info
+} // namespace facebook::strobelight::bpf_lib::pid_info

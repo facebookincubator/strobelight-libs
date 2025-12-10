@@ -26,6 +26,7 @@ extern "C" {
 #include "strobelight/bpf_lib/include/FunctionSource.h"
 
 #include "strobelight/bpf_lib/python/discovery/IPyProcessDiscovery.h"
+
 #include "strobelight/bpf_lib/python/discovery/PyProcessDiscovery.h"
 #include "strobelight/bpf_lib/python/include/PySymbolStructs.h"
 #include "strobelight/bpf_lib/python/include/structs.h"
@@ -50,7 +51,8 @@ struct stack_walker_run {
   // while pidInfoCache_ is still valid.
   std::shared_ptr<facebook::strobelight::IPyProcessDiscovery>
       pyProcessDiscovery_;
-  std::shared_ptr<facebook::pid_info::SharedPidInfoCache> pidInfoCache_;
+  std::shared_ptr<facebook::strobelight::bpf_lib::pid_info::SharedPidInfoCache>
+      pidInfoCache_;
   std::vector<std::string> moduleIdentifierKeywords_;
 
   std::shared_mutex mapsMutex_;
@@ -492,7 +494,8 @@ struct stack_walker_run* pystacks_init(
   run->manualSymbolRefresh_ = opts.manualSymbolRefresh;
 
   run->skel_ = pystacks_subskel__open(bpf_skel_obj),
-  run->pidInfoCache_ = facebook::pid_info::getSharedPidInfoCache(),
+  run->pidInfoCache_ =
+      facebook::strobelight::bpf_lib::pid_info::getSharedPidInfoCache(),
 
   run->skel_->bss.pid_target_helpers_prog_cfg->has_targeted_pids = true;
 

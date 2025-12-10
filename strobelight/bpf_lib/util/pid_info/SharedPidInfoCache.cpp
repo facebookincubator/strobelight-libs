@@ -19,7 +19,7 @@ std::shared_ptr<pid_info::SharedPidInfoCache> getSharedPidInfoCache() {
 
 std::shared_ptr<SharedPidInfo> SharedPidInfoCache::get(
     pid_t pid,
-    std::optional<std::function<bool(TSPidInfo&)>> initFn,
+    std::optional<std::function<bool(SharedPidInfo&)>> initFn,
     clock::time_point now) {
   const std::lock_guard<std::mutex> lock(cacheMutex_);
   auto cacheIt = cache_.find(pid);
@@ -32,7 +32,7 @@ std::shared_ptr<SharedPidInfo> SharedPidInfoCache::get(
 
   // Either not in the cache or need to check for pid reuse. Attempt to read
   // info from /proc.
-  std::shared_ptr<TSPidInfo> newPidInfo(new TSPidInfo(pid, rootDir_));
+  std::shared_ptr<SharedPidInfo> newPidInfo(new SharedPidInfo(pid, rootDir_));
 
   if (cacheIt != cache_.end() && !newPidInfo->isKernelProcess()) {
     auto& oldPidInfo = cacheIt->second.pidInfo;

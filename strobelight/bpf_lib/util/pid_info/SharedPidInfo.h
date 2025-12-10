@@ -8,77 +8,84 @@
 
 namespace facebook::pid_info {
 
-/*
- * TSPidInfoT is a templatized subclass of pid_info::PidInfo-type base class
- * that supports thread-safe access. Methods already const in the base class are
- * fine as is. Any non-const methods (used by Strobelight) have const overrides
- * added with exclusive access to those methods (and corresponding members)
- * guarded by a mutex.
- *
- * In addition, setters are added for a few basic process properties so that
- * they can be populated by means other than a live process / procfs.
- */
-template <typename T>
-class TSPidInfoT : public T {
+// this is the bpf_lib specific implementation of SharedPidInfo
+// and can have all the types specified. The only thing that needs be generic
+// is the interface, which can be kept minimal
+// All SharedPidInfo APIs needed in bpf_lib should have a method here.
+
+class SharedPidInfo {
  private:
   // Disable direct creation of SharedPidInfo. Always use SharedPidInfoCache for
   // consistency and so that procfs doesn't need to be parsed more than once for
   // the same process.
-  explicit TSPidInfoT(pid_t pid, const std::string& rootDir = "");
+  explicit SharedPidInfo(pid_t pid, const std::string& rootDir = "")
+      : internalPidInfo_(pid, rootDir) {}
 
   friend class SharedPidInfoCache;
 
  public:
   /*
-   * Below are methods which require non-const access to the underlying
-   * pid_info::PidInfo. We enable access to these
-   * methods to be thread-safe by adding a const override for each that acquires
-   * a mutex before calling the original non-const method in the base class.
-   * This is built on the assumption that even though the PidInfo will be
-   * mutated (e.g. Lazy) it will only affect members used by that method or
-   * other non-const methods that will end up being protected by the same mutex.
-   */
-  template <typename Logger>
-  void setProcessAndExeFieldsOnLogger(Logger& l) const {
-    withMutableBase(
-        [&](T* mbase) { mbase->setProcessAndExeFieldsOnLogger(l); });
-  }
-
-  template <typename Logger>
-  void setProcessFieldsOnLogger(Logger& l) const {
-    withMutableBase([&](T* mbase) { mbase->setProcessFieldsOnLogger(l); });
-  }
-
-  /*
    * Overrides for setting values.
    */
-
-  void setName(const std::string& name);
-
-  void setParentPid(pid_t ppid);
-
-  void setExe(const std::string& exe);
-
   friend std::ostream& operator<<(
       std::ostream& out,
-      const TSPidInfoT& pidInfo) {
+      const SharedPidInfo& pidInfo) {
     return out << pidInfo.getName() << " [" << pidInfo.getPid() << "]";
   }
 
- private:
-  mutable std::mutex mutex_; // for serializing non-const access
-
-  mutable Lazy<std::optional<std::string>> formattedCmdline_;
-
-  template <class Function>
-  auto withMutableBase(Function&& function) const {
-    std::lock_guard<std::mutex> guard(mutex_);
-    return function(static_cast<T*>(const_cast<TSPidInfoT*>(this)));
+  // getPid
+  pid_t getPid() const {
+    return internalPidInfo_.getPid();
   }
+
+  // getName
+  const std::string& getName() const {
+    return internalPidInfo_.getName();
+  }
+
+  // readMemory
+  ssize_t readMemory(void* dest, const void* src, size_t len) {
+    // mutex?
+    return internalPidInfo_.readMemory(dest, src, len);
+  }
+
+  bool iterateAllMemoryMappings(const MemoryMappingCallback& callback) const {
+    // mutex?
+    return internalPidInfo_.iterateAllMemoryMappings(callback);
+  }
+
+  bool iterateAllMemoryMappings(
+      // mutex?
+      const MemoryMappingWithBaseLoadAddressCallback& callback) const {
+    return internalPidInfo_.iterateAllMemoryMappings(callback);
+  }
+
+  static std::vector<pid_t> getRunningPids(const std::string& rootDir = "") {
+    return ProcPidInfo::getRunningPids(rootDir);
+  }
+
+  std::filesystem::path getProcfsRoot(const std::filesystem::path& path) const {
+    return internalPidInfo_.getProcfsRoot(path);
+  }
+
+  bool isAlive() const {
+    return internalPidInfo_.isAlive();
+  }
+
+  bool isKernelProcess() const {
+    return internalPidInfo_.isKernelProcess();
+  }
+
+  std::chrono::seconds getStartTimeAfterBoot() const {
+    return internalPidInfo_.getStartTimeAfterBoot();
+  }
+
+  bool hasValidInfo() const {
+    return internalPidInfo_.hasValidInfo();
+  }
+
+ private:
+  pid_info::ProcPidInfo internalPidInfo_;
 };
-
-using TSPidInfo = TSPidInfoT<pid_info::ProcPidInfo>;
-
-using SharedPidInfo = const TSPidInfo;
 
 } // namespace facebook::pid_info

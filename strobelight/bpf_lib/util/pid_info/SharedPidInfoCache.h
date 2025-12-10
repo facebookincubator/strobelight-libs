@@ -17,7 +17,7 @@ namespace facebook::pid_info {
 
 // Thread-safe cache on top of SharedPidInfo objects. The main difference
 // between this class and the original pid_info::PidInfoCache is that this class
-// only ever returns a const TSPidInfo (SharedPidInfo) shared_ptr. This
+// only ever returns a const SharedPidInfo shared_ptr. This
 // enables shared / thread-safe access without taking an external lock (more
 // than one thread can read from the same SharedPidInfo const info at a time).
 class SharedPidInfoCache {
@@ -38,7 +38,7 @@ class SharedPidInfoCache {
   // a usable name is known (e.g. comm).
   std::shared_ptr<SharedPidInfo> get(
       pid_t pid,
-      std::optional<std::function<bool(TSPidInfo& newPidInfo)>> initFn =
+      std::optional<std::function<bool(SharedPidInfo& newPidInfo)>> initFn =
           std::nullopt,
       clock::time_point now = clock::now());
 
@@ -61,10 +61,10 @@ class SharedPidInfoCache {
     // last time get(pid) was called
     mutable std::atomic<clock::time_point> lastAccess;
 
-    std::shared_ptr<TSPidInfo> pidInfo;
+    std::shared_ptr<SharedPidInfo> pidInfo;
 
     explicit CacheData(
-        std::shared_ptr<TSPidInfo> pidInfo_,
+        std::shared_ptr<SharedPidInfo> pidInfo_,
         clock::time_point now = clock::now())
         : lastCheck(now), lastAccess(now), pidInfo(pidInfo_) {}
 

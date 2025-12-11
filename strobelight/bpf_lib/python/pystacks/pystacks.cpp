@@ -527,7 +527,6 @@ struct stack_walker_run* pystacks_init(
   strobelight_lib_print(
       STROBELIGHT_LIB_INFO,
       fmt::format("init for pids {}", pidSet.size()).c_str());
-  run->skel_->bss.pystacks_prog_cfg->num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
   run->skel_->bss.pystacks_prog_cfg->read_leaf_frame = false;
   run->skel_->bss.pystacks_prog_cfg->enable_debug_msgs = false;
   run->skel_->bss.pystacks_prog_cfg->enable_py_src_lines = true;

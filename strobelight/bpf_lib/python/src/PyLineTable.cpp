@@ -2,7 +2,6 @@
 
 #include "strobelight/bpf_lib/python/include/PyLineTable.h"
 #include "strobelight/bpf_lib/util/BpfLibLogger.h"
-#include "strobelight/bpf_lib/util/pid_info/SharedPidInfo.h"
 
 #include <fmt/format.h>
 #include <sys/types.h>

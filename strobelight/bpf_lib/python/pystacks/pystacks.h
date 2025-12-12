@@ -14,10 +14,13 @@ extern "C" {
 #endif
 
 struct stack_walker_run;
+struct stack_walker_discovery_opts;
 
 struct stack_walker_run* pystacks_init(
     struct bpf_object* bpf_skel_obj,
-    struct stack_walker_opts& opts);
+    struct stack_walker_opts& opts,
+    // @lint-ignore CLANGTIDY facebook-hte-BadImplicitCast
+    struct stack_walker_discovery_opts* discovery_opts = NULL);
 
 /* Symbolize the function from the stack and store it in the supplied buffer.
  * returns the length of the function name, or an error

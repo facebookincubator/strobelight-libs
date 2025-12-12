@@ -261,7 +261,14 @@ int strobelight_lib_printer(
 }
 }
 
+#ifdef META_TEST_BUILD
+#include <folly/init/Init.h>
+#endif
+
 int main(int argc, char** argv) {
+#ifdef META_TEST_BUILD
+  folly::Init init(&argc, &argv);
+#endif
   PyStacksSample pss;
 
   strobelight_lib_set_print(strobelight_lib_printer);

@@ -24,16 +24,15 @@ extern "C" {
 
 #include <string>
 #include "strobelight/bpf_lib/include/FunctionSource.h"
-
 #include "strobelight/bpf_lib/python/discovery/IPyProcessDiscovery.h"
 
-#include "strobelight/bpf_lib/python/discovery/PyProcessDiscovery.h"
 #include "strobelight/bpf_lib/python/include/PySymbolStructs.h"
 #include "strobelight/bpf_lib/python/include/structs.h"
 #include "strobelight/bpf_lib/python/pystacks.subskel.h"
 #include "strobelight/bpf_lib/util/BpfLibLogger.h"
-#include "strobelight/bpf_lib/util/pid_info/SharedPidInfo.h"
-#include "strobelight/bpf_lib/util/pid_info/SharedPidInfoCache.h"
+
+// @oss-disable: #include "strobelight/bpf_lib/python/facebook/DiscoveryUtil.h"
+#include "strobelight/bpf_lib/python/DiscoveryUtil.h" // @oss-enable
 
 using namespace facebook::strobelight::bpf_lib::python;
 
@@ -51,7 +50,8 @@ struct stack_walker_run {
   // while pidInfoCache_ is still valid.
   std::shared_ptr<facebook::strobelight::IPyProcessDiscovery>
       pyProcessDiscovery_;
-  std::shared_ptr<facebook::strobelight::bpf_lib::pid_info::SharedPidInfoCache>
+  std::shared_ptr<
+      facebook::strobelight::bpf_lib::discovery::TSharedPidInfoCache>
       pidInfoCache_;
   std::vector<std::string> moduleIdentifierKeywords_;
 
@@ -475,7 +475,8 @@ void pystacks_free(struct stack_walker_run* run) {
 
 struct stack_walker_run* pystacks_init(
     struct bpf_object* bpf_skel_obj,
-    struct stack_walker_opts& opts) {
+    struct stack_walker_opts& opts,
+    struct stack_walker_discovery_opts* discovery_opts) {
   std::set<pid_t> pidSet;
 
   if (nullptr != opts.pids) {
@@ -494,16 +495,11 @@ struct stack_walker_run* pystacks_init(
   run->manualSymbolRefresh_ = opts.manualSymbolRefresh;
 
   run->skel_ = pystacks_subskel__open(bpf_skel_obj),
-  run->pidInfoCache_ =
-      facebook::strobelight::bpf_lib::pid_info::getSharedPidInfoCache(),
+
+  discover(
+      pidSet, discovery_opts, run->pidInfoCache_, run->pyProcessDiscovery_);
 
   run->skel_->bss.pid_target_helpers_prog_cfg->has_targeted_pids = true;
-
-  auto ppd = std::make_shared<
-      facebook::strobelight::bpf_lib::python::PyProcessDiscovery>();
-  ppd->findPythonPids(pidSet);
-
-  run->pyProcessDiscovery_ = ppd;
 
   size_t attached_pid_count = 0;
   for (pid_t pid : run->pyProcessDiscovery_->getPythonPids()) {

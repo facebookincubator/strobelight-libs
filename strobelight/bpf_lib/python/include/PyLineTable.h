@@ -6,7 +6,9 @@
 #include <sys/types.h>
 #include <cstdlib>
 #include <optional>
-#include "strobelight/bpf_lib/util/pid_info/SharedPidInfo.h"
+
+// @oss-disable: #include "strobelight/bpf_lib/python/facebook/DiscoveryUtil.h"
+#include "strobelight/bpf_lib/python/DiscoveryUtil.h" // @oss-enable
 
 namespace facebook::strobelight::bpf_lib::python {
 
@@ -20,7 +22,7 @@ class PyLineTable {
       int pyMinorVer);
 
   PyLineTable(
-      pid_info::SharedPidInfo& pidInfo,
+      discovery::TSharedPidInfo& pidInfo,
       int firstLine,
       uintptr_t addr,
       size_t length,

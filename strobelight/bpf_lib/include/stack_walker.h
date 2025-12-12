@@ -31,6 +31,8 @@
 
 #define STACK_WALKER_NO_LINE_INFORMATION std::numeric_limits<uint32_t>::max()
 
+struct stack_walker_discovery_opts;
+
 struct stack_walker_opts {
   size_t pidCount;
   pid_t* pids;
@@ -49,8 +51,10 @@ struct stack_walker_frame {
 extern "C" {
 
 struct stack_walker {
-  struct stack_walker_run* (
-      *init)(struct bpf_object*, struct stack_walker_opts&);
+  struct stack_walker_run* (*init)(
+      struct bpf_object*,
+      struct stack_walker_opts&,
+      struct stack_walker_discovery_opts*);
   void (*free)(struct stack_walker_run*);
 
   int (*symbolize_function)(

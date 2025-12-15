@@ -222,7 +222,7 @@ PyProcessDiscovery::getPyRuntimeInfo(pid_t pid) const {
     return std::nullopt;
   }
 
-  struct binary_id binaryId;
+  struct bpf_lib_binary_id binaryId;
   { // pythonProcessInfoCacheMutex_ rlock
     std::shared_lock<std::shared_mutex> rlock(pythonProcessInfoCacheMutex_);
     auto procItr = pythonProcessInfoCache_.find(pid);
@@ -271,7 +271,7 @@ bool PyProcessDiscovery::checkPyProcessImpl(
   bool found = false;
   facebook::strobelight::bpf_lib::OffsetResolver offsetResolver;
   PyPidData pidData;
-  binary_id pyModuleBinaryId;
+  bpf_lib_binary_id pyModuleBinaryId;
   try {
     pidInfo.iterateAllMemoryMappings([&](const facebook::strobelight::bpf_lib::
                                              pid_info::MemoryMapping& mm,
@@ -293,7 +293,7 @@ bool PyProcessDiscovery::checkPyProcessImpl(
       const bool isPie = elf->isPie();
       const bool isExe = isPie || elf->eType() == ET_EXEC;
       const auto binaryId =
-          binary_id(BPF_LIB_KMKDEV(mm.devMajor, mm.devMinor), mm.inode);
+          bpf_lib_binary_id(BPF_LIB_KMKDEV(mm.devMajor, mm.devMinor), mm.inode);
       // Get BinaryInfo + OffsetResolver for the module
       auto pyBinaryInfo =
           getPyModuleInfo(*elf, mm.name, binaryId, offsetResolver);
@@ -410,7 +410,7 @@ std::optional<PyProcessDiscovery::PyBinaryInfo>
 PyProcessDiscovery::getPyModuleInfo(
     strobelight::ElfFile& elf,
     const std::string& elfPath,
-    struct binary_id binaryId,
+    struct bpf_lib_binary_id binaryId,
     facebook::strobelight::bpf_lib::OffsetResolver& destOffsetResolver) {
   { // pythonModuleInfoCache_ rlock
     std::shared_lock<std::shared_mutex> rlock(pythonModuleInfoCacheMutex_);

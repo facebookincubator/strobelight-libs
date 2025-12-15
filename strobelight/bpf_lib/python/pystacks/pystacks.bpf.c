@@ -47,7 +47,7 @@ struct {
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, BPF_LIB_DEFAULT_MAP_SIZE);
-  __type(key, struct binary_id);
+  __type(key, struct bpf_lib_binary_id);
   __type(value, PyPidData);
 } pystacks_binaryid_config SEC(".maps");
 
@@ -958,7 +958,7 @@ __hidden int pystacks_read_stacks_task(
 
   PyPidData* pid_data = bpf_map_lookup_elem(&pystacks_pid_config, &pid);
   if (!pid_data) {
-    struct binary_id search_key;
+    struct bpf_lib_binary_id search_key;
     search_key.inode = BPF_CORE_READ(cur_task, mm, exe_file, f_inode, i_ino);
     search_key.dev =
         BPF_CORE_READ(cur_task, mm, exe_file, f_inode, i_sb, s_dev);

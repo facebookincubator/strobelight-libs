@@ -67,7 +67,7 @@ class PyProcessDiscovery : public facebook::strobelight::IPyProcessDiscovery {
   std::set<pid_t> pythonPids_;
 
   struct PyProcessInfo {
-    struct binary_id binaryId;
+    struct bpf_lib_binary_id binaryId;
     PyPidData pidData; // memory addresses
   };
   mutable std::shared_mutex pythonProcessInfoCacheMutex_;
@@ -87,7 +87,8 @@ class PyProcessDiscovery : public facebook::strobelight::IPyProcessDiscovery {
   };
 
   mutable std::shared_mutex pythonModuleInfoCacheMutex_;
-  std::unordered_map<struct binary_id, PyModuleInfo> pythonModuleInfoCache_;
+  std::unordered_map<struct bpf_lib_binary_id, PyModuleInfo>
+      pythonModuleInfoCache_;
 
   mutable std::shared_mutex offsetResolutionCountsMutex_;
   bool processOffsetResolution_;
@@ -105,7 +106,7 @@ class PyProcessDiscovery : public facebook::strobelight::IPyProcessDiscovery {
   std::optional<PyBinaryInfo> getPyModuleInfo(
       strobelight::ElfFile& elf,
       const std::string& path,
-      struct binary_id binaryId,
+      struct bpf_lib_binary_id binaryId,
       facebook::strobelight::bpf_lib::OffsetResolver& offsetResolver);
 
   OffsetResolution resolveOffsets(

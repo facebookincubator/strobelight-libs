@@ -20,8 +20,6 @@
 
 namespace facebook::strobelight::bpf_lib::pid_info {
 
-enum class ParStyle { NONE, ZIP, FASTZIP, XAR };
-
 // Stats read from /proc/[pid]/stat
 // Keep types for utime, stime, num_threads specified in 'man proc'
 struct Stats {

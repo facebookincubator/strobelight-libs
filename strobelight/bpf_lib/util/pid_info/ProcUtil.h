@@ -13,10 +13,6 @@
 
 namespace facebook::strobelight::bpf_lib::pid_info {
 
-struct BuildInfo;
-struct BinaryInfo;
-enum class ArchiveType;
-
 bool nextToken(
     const std::string_view& sv,
     const std::string_view& delim,

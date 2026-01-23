@@ -22,7 +22,10 @@
 #define BPF_LIB_MAX_USER_SPACE_ADDRESS ((uintptr_t)0x00ffffffffffffff)
 #elif defined(__aarch64__)
 // https://www.kernel.org/doc/Documentation/arm64/memory.txt
-#define BPF_LIB_MAX_USER_SPACE_ADDRESS ((uintptr_t)0x0000007fffffffff)
+// ARM64 supports multiple VA sizes (39, 48, 52 bits). The kernel starts at
+// 0xffff800000000000 for 48-bit VA, so user space can use up to that address.
+// We use 0x0000ffffffffffff to be safe and cover 48-bit VA mode.
+#define BPF_LIB_MAX_USER_SPACE_ADDRESS ((uintptr_t)0x0000ffffffffffff)
 #else
 #error Unsupported architecture
 #endif

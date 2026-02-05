@@ -11,8 +11,6 @@ std::ostream& operator<<(std::ostream& os, const OffsetConfig& offsets) {
      << "\n\t OffsetConfig.PyTypeObject_name : " << offsets.PyTypeObject_name
      << "\n\t OffsetConfig.PyThreadState_frame : "
      << offsets.PyThreadState_frame
-     << "\n\t OffsetConfig.PyThreadState_shadow_frame : "
-     << offsets.PyThreadState_shadow_frame
      << "\n\t OffsetConfig.PyThreadState_thread : "
      << offsets.PyThreadState_thread
      << "\n\t OffsetConfig.PyThreadState_interp : "
@@ -26,8 +24,6 @@ std::ostream& operator<<(std::ostream& os, const OffsetConfig& offsets) {
      << "\n\t OffsetConfig.PyFrameObject_localsplus : "
      << offsets.PyFrameObject_localsplus
      << "\n\t OffsetConfig.PyFrameObject_gen : " << offsets.PyFrameObject_gen
-     << "\n\t OffsetConfig.PyGenObject_gi_shadow_frame : "
-     << offsets.PyGenObject_gi_shadow_frame
      << "\n\t OffsetConfig.PyCodeObject_co_flags : "
      << offsets.PyCodeObject_co_flags
      << "\n\t OffsetConfig.PyCodeObject_filename : "
@@ -46,24 +42,6 @@ std::ostream& operator<<(std::ostream& os, const OffsetConfig& offsets) {
      << "\n\t OffsetConfig.PyTupleObject_item : " << offsets.PyTupleObject_item
      << "\n\t OffsetConfig.PyCoroObject_cr_awaiter : "
      << offsets.PyCoroObject_cr_awaiter
-     << "\n\t OffsetConfig.PyShadowFrame_prev : " << offsets.PyShadowFrame_prev
-     << "\n\t OffsetConfig.PyShadowFrame_data : " << offsets.PyShadowFrame_data
-     << "\n\t OffsetConfig.PyShadowFrame_PtrMask : "
-     << offsets.PyShadowFrame_PtrMask
-     << "\n\t OffsetConfig.PyShadowFrame_PtrKindMask : "
-     << offsets.PyShadowFrame_PtrKindMask
-     << "\n\t OffsetConfig.PyShadowFrame_PYSF_CODE_RT : "
-     << offsets.PyShadowFrame_PYSF_CODE_RT
-     << "\n\t OffsetConfig.PyShadowFrame_PYSF_PYCODE : "
-     << offsets.PyShadowFrame_PYSF_PYCODE
-     << "\n\t OffsetConfig.PyShadowFrame_PYSF_PYFRAME : "
-     << offsets.PyShadowFrame_PYSF_PYFRAME
-     << "\n\t OffsetConfig.PyShadowFrame_PYSF_RTFS : "
-     << offsets.PyShadowFrame_PYSF_RTFS
-     << "\n\t OffsetConfig.CodeRuntime_py_code : "
-     << offsets.CodeRuntime_py_code
-     << "\n\t OffsetConfig.RuntimeFrameState_py_code : "
-     << offsets.RuntimeFrameState_py_code
      << "\n\t OffsetConfig.String_data : " << offsets.String_data
      << "\n\t OffsetConfig.TLSKey_offset : " << offsets.TLSKey_offset
      << "\n\t OffsetConfig.TCurrentState_offset : "

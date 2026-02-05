@@ -15,7 +15,6 @@ struct OffsetConfig {
         PyTypeObject_name(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyThreadState_frame(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyThreadState_cframe(BPF_LIB_DEFAULT_FIELD_OFFSET),
-        PyThreadState_shadow_frame(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyThreadState_thread(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyThreadState_interp(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyInterpreterState_modules(BPF_LIB_DEFAULT_FIELD_OFFSET),
@@ -29,7 +28,6 @@ struct OffsetConfig {
         PyInterpreterFrame_previous(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyInterpreterFrame_localsplus(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyInterpreterFrame_prev_instr(BPF_LIB_DEFAULT_FIELD_OFFSET),
-        PyGenObject_gi_shadow_frame(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyCodeObject_co_flags(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyCodeObject_filename(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyCodeObject_name(BPF_LIB_DEFAULT_FIELD_OFFSET),
@@ -40,16 +38,6 @@ struct OffsetConfig {
         PyTupleObject_item(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyCodeObject_qualname(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyCoroObject_cr_awaiter(BPF_LIB_DEFAULT_FIELD_OFFSET),
-        PyShadowFrame_prev(BPF_LIB_DEFAULT_FIELD_OFFSET),
-        PyShadowFrame_data(BPF_LIB_DEFAULT_FIELD_OFFSET),
-        PyShadowFrame_PtrMask(BPF_LIB_DEFAULT_FIELD_OFFSET),
-        PyShadowFrame_PtrKindMask(BPF_LIB_DEFAULT_FIELD_OFFSET),
-        PyShadowFrame_PYSF_CODE_RT(BPF_LIB_DEFAULT_FIELD_OFFSET),
-        PyShadowFrame_PYSF_PYCODE(BPF_LIB_DEFAULT_FIELD_OFFSET),
-        PyShadowFrame_PYSF_PYFRAME(BPF_LIB_DEFAULT_FIELD_OFFSET),
-        PyShadowFrame_PYSF_RTFS(BPF_LIB_DEFAULT_FIELD_OFFSET),
-        CodeRuntime_py_code(BPF_LIB_DEFAULT_FIELD_OFFSET),
-        RuntimeFrameState_py_code(BPF_LIB_DEFAULT_FIELD_OFFSET),
         String_data(BPF_LIB_DEFAULT_FIELD_OFFSET),
         TLSKey_offset(BPF_LIB_DEFAULT_FIELD_OFFSET),
         TCurrentState_offset(BPF_LIB_DEFAULT_FIELD_OFFSET),
@@ -73,7 +61,6 @@ typedef struct {
   uintptr_t PyTypeObject_name;
   uintptr_t PyThreadState_frame;
   uintptr_t PyThreadState_cframe;
-  uintptr_t PyThreadState_shadow_frame;
   uintptr_t PyThreadState_thread;
   uintptr_t PyThreadState_interp;
   uintptr_t PyInterpreterState_modules;
@@ -87,7 +74,6 @@ typedef struct {
   uintptr_t PyInterpreterFrame_previous;
   uintptr_t PyInterpreterFrame_localsplus;
   uintptr_t PyInterpreterFrame_prev_instr;
-  uintptr_t PyGenObject_gi_shadow_frame;
   uintptr_t PyCodeObject_co_flags;
   uintptr_t PyCodeObject_filename;
   uintptr_t PyCodeObject_name;
@@ -98,16 +84,6 @@ typedef struct {
   uintptr_t PyTupleObject_item;
   uintptr_t PyCodeObject_qualname;
   uintptr_t PyCoroObject_cr_awaiter;
-  uintptr_t PyShadowFrame_prev;
-  uintptr_t PyShadowFrame_data;
-  uintptr_t PyShadowFrame_PtrMask;
-  uintptr_t PyShadowFrame_PtrKindMask;
-  uintptr_t PyShadowFrame_PYSF_CODE_RT;
-  uintptr_t PyShadowFrame_PYSF_PYCODE;
-  uintptr_t PyShadowFrame_PYSF_PYFRAME;
-  uintptr_t PyShadowFrame_PYSF_RTFS;
-  uintptr_t CodeRuntime_py_code;
-  uintptr_t RuntimeFrameState_py_code;
   uintptr_t String_data;
   uintptr_t TLSKey_offset;
   uintptr_t TCurrentState_offset;

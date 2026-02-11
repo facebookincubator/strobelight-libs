@@ -48,8 +48,7 @@ static const std::unordered_set<std::string> kPythonSymbolNames = [] {
       kPySysImplCacheTagSymbolName,
       kAutoTLSKeySymbolName,
       kGilLockedSymbolName,
-      kGilLastHolderSymbolName,
-      kStrobeCodeRTPyCodeSymblName};
+      kGilLastHolderSymbolName};
   auto processOffsetSymbols = facebook::strobelight::bpf_lib::OffsetResolver::
       getProcessOffsetSymbolNames();
   pySymbolNames.insert(

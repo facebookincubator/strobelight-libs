@@ -87,6 +87,7 @@ struct sample_state_t {
   OffsetConfig offsets;
   uint64_t cur_cpu;
   void* frame_ptr;
+  bool sync_use_shadow_frame;
   char long_file_name[BPF_LIB_FILE_NAME_TRYGET];
   struct pystacks_symbol sym;
   struct pystacks_line_table linetable;
@@ -111,6 +112,37 @@ static __always_inline struct sample_state_t* get_state() {
   }
 
 static symbol_id_t next_symbol_id = 1;
+
+static __always_inline void read_shadow_frame_data(
+    void* shadow_frame,
+    const OffsetConfig* const offsets,
+    void** data_ptr,
+    int64_t* ptr_kind,
+    struct task_struct* task) {
+  // The PyShadowFrame stores a variety of Py objects in its "data" field
+  // We determine the type using the bottom n bits in the "data" field
+  void* shadow_frame_data;
+  // If the read on shadow_frame->data is unsuccessful set everything to NULL
+  // and return early
+  if (bpf_probe_read_user_task(
+          &shadow_frame_data,
+          sizeof(void*),
+          (char*)shadow_frame + offsets->PyShadowFrame_data,
+          task) < 0) {
+    *ptr_kind = -1;
+    *data_ptr = NULL;
+    return;
+  }
+  // The bottom n bits are extracted using the ptr kind bit mask
+  // (PyShadowFrame_PtrKindMask)
+  *ptr_kind = (int64_t)((uintptr_t)shadow_frame_data &
+                        (uintptr_t)offsets->PyShadowFrame_PtrKindMask);
+  // The pointer to the object is stored in the top 64 - n bits of the "data"
+  // field We extract that pointer using the ptr bit mask
+  // (PyShadowFrame_PtrKindMask)
+  *data_ptr = (void*)((uintptr_t)shadow_frame_data &
+                      (uintptr_t)offsets->PyShadowFrame_PtrMask);
+}
 
 static symbol_id_t get_py_symbol_id(struct pystacks_symbol* const sym) {
   symbol_id_t* id = bpf_map_lookup_elem(&pystacks_symbols, sym);
@@ -141,6 +173,7 @@ static __always_inline void* get_gen_ptr(
     void* frame_ptr,
     void* code_ptr,
     const OffsetConfig* const offsets,
+    bool use_shadow_frame,
     struct task_struct* task) {
   if (!code_ptr) {
     return NULL;
@@ -157,8 +190,39 @@ static __always_inline void* get_gen_ptr(
     return NULL;
   }
 
+  if (use_shadow_frame) {
+    void* data_ptr;
+    int64_t ptr_kind;
+    read_shadow_frame_data(frame_ptr, offsets, &data_ptr, &ptr_kind, task);
+    if (!data_ptr || ptr_kind == -1) {
+      return NULL;
+    }
+    const int gen_flags = BPF_LIB_CO_COROUTINE | BPF_LIB_CO_ITERABLE_COROUTINE;
+    // JIT'd coroutines have their shadow frames embedded in the coroutine
+    // object
+    if (ptr_kind == offsets->PyShadowFrame_PYSF_CODE_RT &&
+        (co_flags & gen_flags)) {
+      gen_ptr =
+          (void*)((char*)frame_ptr - offsets->PyGenObject_gi_shadow_frame);
+    }
+    // Other coroutines have the PyFrameObject in the shadow frame data member
+    // We can then get the coroutine obejct using PyFrameObject->f_gen
+    else if (
+        ptr_kind == offsets->PyShadowFrame_PYSF_PYFRAME &&
+        (co_flags & BPF_LIB_CO_COROUTINE)) {
+      if (bpf_probe_read_user_task(
+              &gen_ptr,
+              sizeof(void*),
+              (char*)data_ptr + offsets->PyFrameObject_gen,
+              task) < 0) {
+        return NULL;
+      }
+    }
+    // ptr_kind == offsets->PyShadowFrame_PYSF_PYCODE
+    // returns NULL
+  }
   // We check code flag first for old style coroutines, f_gen only exists in PY3
-  if (co_flags & BPF_LIB_CO_COROUTINE) {
+  else if (co_flags & BPF_LIB_CO_COROUTINE) {
     bpf_probe_read_user_task(
         &gen_ptr,
         sizeof(void*),
@@ -172,6 +236,7 @@ static __always_inline void get_names(
     struct sample_state_t* const state,
     void* cur_frame,
     void* code_ptr,
+    bool use_shadow_frame,
     struct task_struct* task) {
   const OffsetConfig* const offsets = &state->offsets;
   const pid_t pid = task ? BPF_CORE_READ(task, tgid)
@@ -232,7 +297,27 @@ static __always_inline void get_names(
 
       int32_t lasti = -1;
       if (offsets->PyVersion_major == 3 && offsets->PyVersion_minor < 11) {
-        if (offsets->PyFrameObject_lasti != BPF_LIB_DEFAULT_FIELD_OFFSET) {
+        if (use_shadow_frame) {
+          // If shadow frames are used then cur_frame points to a PyShadowFrame
+          // - not a PyFrameObject. The content of the `data` member of a
+          // PyShadowFrame varies according to `ptr_knd`.
+          void* data_ptr;
+          int64_t ptr_kind;
+          read_shadow_frame_data(
+              cur_frame, offsets, &data_ptr, &ptr_kind, task);
+          if (data_ptr && ptr_kind == offsets->PyShadowFrame_PYSF_PYFRAME) {
+            // data_ptr holds PyFrameObject*.
+            // See cinder/include/internal/pycore_shadow_frame_struct.h
+            bpf_probe_read_user_task(
+                &lasti,
+                sizeof(lasti),
+                data_ptr + offsets->PyFrameObject_lasti,
+                task);
+          } else {
+            state->lasti = -2; // unsupported ptr_kind
+          }
+        } else if (
+            offsets->PyFrameObject_lasti != BPF_LIB_DEFAULT_FIELD_OFFSET) {
           bpf_probe_read_user_task(
               &lasti,
               sizeof(lasti),
@@ -302,7 +387,7 @@ static __always_inline void get_names(
   // termination character '\0' so we consider it empty We also want to fallback
   // if there is a failure when reading qualname which will result in a negative
   // qualname_len
-  if (qualname_len <= 1) {
+  if (!use_shadow_frame && qualname_len <= 1) {
     // Figure out if we want to parse class name, basically checking the name of
     // the first argument,
     //   ((PyTupleObject*)$frame->f_code->co_varnames)->ob_item[0]
@@ -389,21 +474,56 @@ static __always_inline void get_names(
 static __always_inline void* get_code_ptr(
     void* frame_ptr,
     const OffsetConfig* const offsets,
+    bool use_shadow_frame,
     struct task_struct* task) {
   long result = 0;
+  // The frame pointer can be either a PyFrameObject or a PyShadowFrame
   void* code_ptr = NULL;
-  if (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 11) {
-    result = bpf_probe_read_user_task(
-        &code_ptr,
-        sizeof(void*),
-        (char*)frame_ptr + offsets->PyInterpreterFrame_code,
-        task);
-  } else {
-    result = bpf_probe_read_user_task(
-        &code_ptr,
-        sizeof(void*),
-        (char*)frame_ptr + offsets->PyFrameObject_code,
-        task);
+  // If we are using shadow frames we know the frame pointer is a PyShadowFrame
+  if (use_shadow_frame) {
+    void* data_ptr;
+    int64_t ptr_kind;
+    read_shadow_frame_data(frame_ptr, offsets, &data_ptr, &ptr_kind, task);
+    if (!data_ptr || ptr_kind == -1) {
+      return NULL;
+    }
+    if (ptr_kind == offsets->PyShadowFrame_PYSF_CODE_RT) {
+      result = bpf_probe_read_user_task(
+          &code_ptr,
+          sizeof(void*),
+          (char*)data_ptr + offsets->CodeRuntime_py_code,
+          task);
+    } else if (ptr_kind == offsets->PyShadowFrame_PYSF_RTFS) {
+      result = bpf_probe_read_user_task(
+          &code_ptr,
+          sizeof(void*),
+          (char*)data_ptr + offsets->RuntimeFrameState_py_code,
+          task);
+    } else if (ptr_kind == offsets->PyShadowFrame_PYSF_PYFRAME) {
+      result = bpf_probe_read_user_task(
+          &code_ptr,
+          sizeof(void*),
+          (char*)data_ptr + offsets->PyFrameObject_code,
+          task);
+    } else if (ptr_kind == offsets->PyShadowFrame_PYSF_PYCODE) {
+      code_ptr = data_ptr;
+    }
+  }
+  // If we aren't using shadow frames then the frame pointer is a PyFrameObject
+  else {
+    if (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 11) {
+      result = bpf_probe_read_user_task(
+          &code_ptr,
+          sizeof(void*),
+          (char*)frame_ptr + offsets->PyInterpreterFrame_code,
+          task);
+    } else {
+      result = bpf_probe_read_user_task(
+          &code_ptr,
+          sizeof(void*),
+          (char*)frame_ptr + offsets->PyFrameObject_code,
+          task);
+    }
   }
   if (result != 0) {
     code_ptr = NULL;
@@ -428,6 +548,7 @@ __noinline bool pystacks_get_frame_data(int pid) {
     return false;
   }
 
+  bool use_shadow_frame = state->sync_use_shadow_frame;
   const OffsetConfig* const offsets = &state->offsets;
 
   struct task_struct* task;
@@ -435,13 +556,14 @@ __noinline bool pystacks_get_frame_data(int pid) {
     return false;
   }
 
-  void* code_ptr = get_code_ptr(state->frame_ptr, offsets, task);
+  void* code_ptr =
+      get_code_ptr(state->frame_ptr, offsets, use_shadow_frame, task);
 
-  get_names(state, state->frame_ptr, code_ptr, task);
+  get_names(state, state->frame_ptr, code_ptr, use_shadow_frame, task);
 
   int ret_code = 0;
 
-  // read next PyFrameObject pointer
+  // read next PyFrameObject/PyShadowFrame pointer
   if (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 11) {
     ret_code = bpf_probe_read_user_task(
         &state->frame_ptr,
@@ -453,7 +575,9 @@ __noinline bool pystacks_get_frame_data(int pid) {
     ret_code = bpf_probe_read_user_task(
         &state->frame_ptr,
         sizeof(void*),
-        state->frame_ptr + offsets->PyFrameObject_back,
+        state->frame_ptr +
+            (use_shadow_frame ? offsets->PyShadowFrame_prev
+                              : offsets->PyFrameObject_back),
         task);
   }
 
@@ -518,7 +642,7 @@ static __always_inline void read_leaf_frame(
   void* frame_ptr =
       (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 10) ? pt2
                                                                         : pt1;
-  void* code_ptr = get_code_ptr(frame_ptr, &state->offsets, task);
+  void* code_ptr = get_code_ptr(frame_ptr, &state->offsets, false, task);
 
   /*
   *** Problem ***
@@ -539,8 +663,18 @@ static __always_inline void read_leaf_frame(
   Do not add leaf symbol to the buffer in case the PyFrameObject read from the
   register has a non-NULL generator object.
   */
-  if (!get_gen_ptr(frame_ptr, code_ptr, &state->offsets, task)) {
-    get_names(state, frame_ptr, code_ptr, task);
+  if (!get_gen_ptr(
+          frame_ptr,
+          code_ptr,
+          &state->offsets,
+          false /* this is not a shadow frame */,
+          task)) {
+    get_names(
+        state,
+        frame_ptr,
+        code_ptr,
+        false /* this is not a shadow frame */,
+        task);
 
     add_symbol_to_buffer(py_msg);
   }
@@ -654,9 +788,11 @@ static __always_inline void* get_thread_state(
 }
 
 // Get the frame pointer from the thread state
+// This could either be the PyFrameObject of PyShadowFrame
 static __always_inline void* get_frame_ptr(
     void* thread_state,
     const OffsetConfig* const offsets,
+    bool use_shadow_frame,
     struct task_struct* task) {
   void* frame_ptr;
 
@@ -664,7 +800,9 @@ static __always_inline void* get_frame_ptr(
     if (bpf_probe_read_user_task(
             &frame_ptr,
             sizeof(void*),
-            (char*)thread_state + offsets->PyThreadState_frame,
+            (char*)thread_state +
+                (use_shadow_frame ? offsets->PyThreadState_shadow_frame
+                                  : offsets->PyThreadState_frame),
             task) < 0) {
       frame_ptr = NULL;
     }
@@ -685,6 +823,25 @@ static __always_inline void* get_frame_ptr(
     }
   }
   return frame_ptr;
+}
+
+// Determine if can use shadow frames when profiling based on offset
+// availability
+static __always_inline bool use_shadow_frame(
+    const OffsetConfig* const offsets) {
+  // Use of shadow frames rely on these offsets and thus they must be defined
+  // These offsets are defaulted to an invalid offset of
+  // BPF_LIB_DEFAULT_FIELD_OFFSET in the offset resolver
+  return offsets->PyThreadState_shadow_frame != BPF_LIB_DEFAULT_FIELD_OFFSET &&
+      offsets->PyGenObject_gi_shadow_frame != BPF_LIB_DEFAULT_FIELD_OFFSET &&
+      offsets->PyCoroObject_cr_awaiter != BPF_LIB_DEFAULT_FIELD_OFFSET &&
+      offsets->PyShadowFrame_data != BPF_LIB_DEFAULT_FIELD_OFFSET &&
+      offsets->PyShadowFrame_prev != BPF_LIB_DEFAULT_FIELD_OFFSET &&
+      offsets->PyShadowFrame_PtrMask != BPF_LIB_DEFAULT_FIELD_OFFSET &&
+      offsets->PyShadowFrame_PtrKindMask != BPF_LIB_DEFAULT_FIELD_OFFSET &&
+      offsets->PyShadowFrame_PYSF_CODE_RT != BPF_LIB_DEFAULT_FIELD_OFFSET &&
+      offsets->PyShadowFrame_PYSF_PYCODE != BPF_LIB_DEFAULT_FIELD_OFFSET &&
+      offsets->PyShadowFrame_PYSF_PYFRAME != BPF_LIB_DEFAULT_FIELD_OFFSET;
 }
 
 static __always_inline int
@@ -880,8 +1037,14 @@ __hidden int pystacks_read_stacks_task(
     return 0; // PYSTACKS_SUCCESS;
   }
 
+  // Shadow frame usage is determined by availability off shadow frame
+  // related offsets. This condition is the same for both sync and async
+  // python stacks
+  state->sync_use_shadow_frame = use_shadow_frame(&pid_data->offsets);
+
   // Get pointer to top frame from PyThreadState
-  state->frame_ptr = get_frame_ptr(thread_state, &pid_data->offsets, task);
+  state->frame_ptr = get_frame_ptr(
+      thread_state, &pid_data->offsets, state->sync_use_shadow_frame, task);
   if (!state->frame_ptr) {
     py_msg->probe_time_ns = bpf_ktime_get_ns() - sample_ts;
     return 0; // PYSTACKS_SUCCESS; // Finalize sample.

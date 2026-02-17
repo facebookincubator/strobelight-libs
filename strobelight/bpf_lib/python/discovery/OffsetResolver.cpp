@@ -18,8 +18,6 @@ namespace facebook::strobelight::bpf_lib {
 
 #define BPF_LIB_REQUIRED_SYMBOL(name) \
   BPF_LIB_MAKE_PROC_SYM_INFO("__strobe_", name, true)
-#define BPF_LIB_REQUIRED_SYMBOL_SF(name) \
-  BPF_LIB_MAKE_PROC_SYM_INFO("__strobe__", name, true)
 #define BPF_LIB_OPTIONAL_SYMBOL(name) \
   BPF_LIB_MAKE_PROC_SYM_INFO("__strobe_", name, false)
 
@@ -39,7 +37,6 @@ OffsetResolver::OffsetResolver()
       BPF_LIB_REQUIRED_SYMBOL(PyObject_type),
       BPF_LIB_REQUIRED_SYMBOL(PyTypeObject_name),
       BPF_LIB_REQUIRED_SYMBOL(PyThreadState_frame),
-      BPF_LIB_REQUIRED_SYMBOL(PyThreadState_shadow_frame),
       BPF_LIB_REQUIRED_SYMBOL(PyThreadState_thread),
       BPF_LIB_OPTIONAL_SYMBOL(PyThreadState_interp),
       BPF_LIB_OPTIONAL_SYMBOL(PyInterpreterState_modules),
@@ -53,7 +50,6 @@ OffsetResolver::OffsetResolver()
       BPF_LIB_OPTIONAL_SYMBOL(PyInterpreterFrame_localsplus),
       BPF_LIB_OPTIONAL_SYMBOL(PyInterpreterFrame_prev_instr),
       BPF_LIB_OPTIONAL_SYMBOL(_PyCFrame_current_frame),
-      BPF_LIB_REQUIRED_SYMBOL(PyGenObject_gi_shadow_frame),
       BPF_LIB_REQUIRED_SYMBOL(PyCodeObject_co_flags),
       BPF_LIB_REQUIRED_SYMBOL(PyCodeObject_filename),
       BPF_LIB_REQUIRED_SYMBOL(PyCodeObject_name),
@@ -64,16 +60,6 @@ OffsetResolver::OffsetResolver()
       BPF_LIB_REQUIRED_SYMBOL(PyTupleObject_item),
       BPF_LIB_REQUIRED_SYMBOL(PyCodeObject_qualname),
       BPF_LIB_REQUIRED_SYMBOL(PyCoroObject_cr_awaiter),
-      BPF_LIB_REQUIRED_SYMBOL_SF(PyShadowFrame_prev),
-      BPF_LIB_REQUIRED_SYMBOL_SF(PyShadowFrame_data),
-      BPF_LIB_REQUIRED_SYMBOL_SF(PyShadowFrame_PtrMask),
-      BPF_LIB_REQUIRED_SYMBOL_SF(PyShadowFrame_PtrKindMask),
-      BPF_LIB_REQUIRED_SYMBOL_SF(PyShadowFrame_PYSF_CODE_RT),
-      BPF_LIB_REQUIRED_SYMBOL_SF(PyShadowFrame_PYSF_PYCODE),
-      BPF_LIB_REQUIRED_SYMBOL_SF(PyShadowFrame_PYSF_PYFRAME),
-      BPF_LIB_REQUIRED_SYMBOL_SF(PyShadowFrame_PYSF_RTFS),
-      BPF_LIB_REQUIRED_SYMBOL(CodeRuntime_py_code),
-      BPF_LIB_REQUIRED_SYMBOL(RuntimeFrameState_py_code),
       BPF_LIB_REQUIRED_SYMBOL(String_data),
       BPF_LIB_REQUIRED_SYMBOL(TLSKey_offset),
       BPF_LIB_REQUIRED_SYMBOL(TCurrentState_offset),

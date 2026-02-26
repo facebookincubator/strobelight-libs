@@ -6,6 +6,8 @@
 // @oss-disable: #include <bpf/vmlinux/vmlinux.h>
 #include <vmlinux.h> // @oss-enable
 
+void* get_thread_state_task(uint32_t key, struct task_struct* task);
+
 int probe_read_pthread_tls_slot(
     uint32_t key,
     void** value,

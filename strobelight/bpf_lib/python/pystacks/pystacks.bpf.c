@@ -637,20 +637,14 @@ static __always_inline void* get_thread_state(
   // implementation: https://fburl.com/j2u1fvs8
 
   // read TLS key
-  int key = 0;
+  uint32_t key = 0;
   long result = bpf_probe_read_user_task(
       &key, sizeof(key), (void*)pid_data->tls_key_addr, task);
   if (result != 0) {
     return NULL;
   }
 
-  void* thread_state;
-  result = probe_read_pthread_tls_slot(key, &thread_state, task);
-  if (result != 0) {
-    return NULL;
-  }
-
-  return thread_state;
+  return get_pthread_specific_data_task(key, task);
 }
 
 // Get the frame pointer from the thread state

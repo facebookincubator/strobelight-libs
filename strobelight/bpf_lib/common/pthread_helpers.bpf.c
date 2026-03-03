@@ -67,9 +67,11 @@ static void* get_pthread_task(
   return pthread;
 }
 
-// Read python thread state, mirroring the logic of pthread_getspecific
+// Read pthread specific data, mirroring the logic of pthread_getspecific
 // function.
-__hidden void* get_thread_state_task(uint32_t key, struct task_struct* task) {
+__hidden void* get_pthread_specific_data_task(
+    uint32_t key,
+    struct task_struct* task) {
   if (key >= 1024) {
     bpf_printk_debug("invalid pthread_key");
     return NULL;
@@ -90,8 +92,8 @@ __hidden void* get_thread_state_task(uint32_t key, struct task_struct* task) {
 
   long ret;
   void* pthread = get_pthread_task(&offsets, task);
-  void* thread_state_addr = NULL;
-  void* thread_state = NULL;
+  void* data_addr = NULL;
+  void* data = NULL;
 
   if (key < 32) {
     uint32_t i = key;
@@ -101,7 +103,7 @@ __hidden void* get_thread_state_task(uint32_t key, struct task_struct* task) {
         offsets.pthread_key_size * i + offsets.pthread_key_data_offset;
     bpf_printk_debug(
         "pthread_specific_1stblock=0x%llx", specific_1stblock_addr);
-    thread_state_addr = specific_1stblock_addr;
+    data_addr = specific_1stblock_addr;
   } else {
     uint32_t i = key / 32;
     uint32_t j = key % 32;
@@ -123,18 +125,17 @@ __hidden void* get_thread_state_task(uint32_t key, struct task_struct* task) {
         "pthread_specific_1stblock=0x%llx", specific_1stblock_addr);
     bpf_printk_debug(
         "pthread_specific_2ndblock=0x%llx", specific_2ndblock_addr);
-    thread_state_addr = specific_2ndblock_addr;
+    data_addr = specific_2ndblock_addr;
   }
 
-  ret = bpf_probe_read_user_task(
-      &thread_state, sizeof(thread_state), thread_state_addr, task);
+  ret = bpf_probe_read_user_task(&data, sizeof(data), data_addr, task);
   if (ret != 0) {
-    bpf_printk_debug("failed to read thread_state, ret=%d", ret);
+    bpf_printk_debug("failed to read pthread_specific_data, ret=%d", ret);
     return NULL;
   }
-  bpf_printk_debug("thread_state=0x%llx", thread_state);
+  bpf_printk_debug("pthread_specific_data=0x%llx", data);
 
-  return thread_state;
+  return data;
 }
 
 // Read the current value of the pthread tls slot, mirroring the logic

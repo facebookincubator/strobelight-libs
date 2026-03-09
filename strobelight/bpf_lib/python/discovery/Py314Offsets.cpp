@@ -33,6 +33,10 @@ Deprecated offsets (same as 3.12):
 - PyCodeObject_varnames
 - PyGIL_offset (T186091105 to remove)
 - PyGIL_last_holder (T186091105 to remove)
+
+PyFrameObject_owner is at offset 74, changed from 3.12's 70 because stacktop
+(int, 4 bytes) was replaced by stackpointer (pointer, 8 bytes), shifting
+return_offset and owner by 4.
 */
 
 extern const OffsetConfig kPy314OffsetConfig = [] {
@@ -77,7 +81,7 @@ extern const OffsetConfig kPy314OffsetConfig = [] {
   config.PyVersion_micro = 3;
   config.PyCoroObject_cr_awaiter = 64; // offsetof(PyCoroObject, cr_ci_awaiter)
   config.PyGenObject_iframe = 80;
-  config.PyFrameObject_owner = 70;
+  config.PyFrameObject_owner = 74; // offsetof(_PyInterpreterFrame, owner)
 
   return config;
 }();

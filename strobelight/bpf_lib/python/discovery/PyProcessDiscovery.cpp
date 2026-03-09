@@ -19,6 +19,7 @@ extern "C" {
 #include <fmt/ostream.h> // needed for PidInfo in formatter
 #include <re2/re2.h>
 #include <strobelight/bpf_lib/util/ElfFile.h>
+#include <cstring>
 #include <memory>
 
 #include "strobelight/bpf_lib/python/discovery/OffsetResolver.h"
@@ -478,6 +479,34 @@ PyProcessDiscovery::getPyModuleInfo(
   const uintptr_t strobeCodeRTPyCodeAddr = getElfSymbolAddress(
       elf, elfPath, pySymbols.at(kStrobeCodeRTPyCodeSymblName));
 
+  // Detect free-threaded (no-GIL) Python builds via _Py_DebugOffsets.
+  // _PyRuntimeState starts with _Py_DebugOffsets whose layout is:
+  //   char cookie[8]       @ offset 0   -- must be "xdebugpy"
+  //   uint64_t version     @ offset 8   -- PY_VERSION_HEX
+  //   uint64_t free_threaded @ offset 16 -- 0 (GIL) or 1 (no-GIL)
+  // Available in CPython 3.12+.
+  if (pyVersion && pyRuntimeAddr) {
+    static constexpr char kDebugCookie[] = "xdebugpy";
+    static constexpr size_t kDebugCookieSize = 8;
+    const char* cookiePtr = elf.getAddressValue<char>(pyRuntimeAddr);
+    if (cookiePtr &&
+        std::memcmp(cookiePtr, kDebugCookie, kDebugCookieSize) == 0) {
+      const uint64_t* freeThreadedPtr = elf.getAddressValue<uint64_t>(
+          pyRuntimeAddr + kPy314tOffsetConfig.PyDebugOffsets_free_threaded);
+      if (freeThreadedPtr && *freeThreadedPtr != 0) {
+        if (pyVersion->empty() || pyVersion->back() != 't') {
+          *pyVersion += "t";
+        }
+        strobelight_lib_print(
+            STROBELIGHT_LIB_INFO,
+            fmt::format(
+                "Detected free-threaded Python build via _Py_DebugOffsets: {}",
+                *pyVersion)
+                .c_str());
+      }
+    }
+  }
+
   { // pythonModuleInfoCache_ wlock
     std::unique_lock<std::shared_mutex> wlock(pythonModuleInfoCacheMutex_);
     auto& moduleInfo = pythonModuleInfoCache_[binaryId];
@@ -543,13 +572,19 @@ PyProcessDiscovery::getPyModuleInfo(
       data.tls_key_addr = pyRuntimeAddr + data.offsets.TLSKey_offset;
       // TCurrentState_offset: offsetof(_PyRuntimeState,
       // gilstate.tstate_current)
-      data.current_state_addr =
-          pyRuntimeAddr + data.offsets.TCurrentState_offset;
+      if (data.offsets.TCurrentState_offset != BPF_LIB_DEFAULT_FIELD_OFFSET) {
+        data.current_state_addr =
+            pyRuntimeAddr + data.offsets.TCurrentState_offset;
+      }
       // The GIL locked address/last holder is calculated as an offset after
       // Python3.7
-      data.gil_locked_addr = pyRuntimeAddr + data.offsets.PyGIL_offset;
-      data.gil_last_holder_addr =
-          pyRuntimeAddr + data.offsets.PyGIL_last_holder;
+      if (data.offsets.PyGIL_offset != BPF_LIB_DEFAULT_FIELD_OFFSET) {
+        data.gil_locked_addr = pyRuntimeAddr + data.offsets.PyGIL_offset;
+      }
+      if (data.offsets.PyGIL_last_holder != BPF_LIB_DEFAULT_FIELD_OFFSET) {
+        data.gil_last_holder_addr =
+            pyRuntimeAddr + data.offsets.PyGIL_last_holder;
+      }
     }
     data.use_tls = (data.tls_key_addr > 0);
 
@@ -802,8 +837,18 @@ PyPidData PyProcessDiscovery::computePyPidData(
       // copy in the executable.
       pidData.tls_key_addr =
           pidData.tls_key_addr - pidData.py_runtime_addr + exePyRuntimeAddr;
-      pidData.current_state_addr = pidData.current_state_addr -
-          pidData.py_runtime_addr + exePyRuntimeAddr;
+      if (pidData.current_state_addr != 0) {
+        pidData.current_state_addr = pidData.current_state_addr -
+            pidData.py_runtime_addr + exePyRuntimeAddr;
+      }
+      if (pidData.gil_locked_addr != 0) {
+        pidData.gil_locked_addr = pidData.gil_locked_addr -
+            pidData.py_runtime_addr + exePyRuntimeAddr;
+      }
+      if (pidData.gil_last_holder_addr != 0) {
+        pidData.gil_last_holder_addr = pidData.gil_last_holder_addr -
+            pidData.py_runtime_addr + exePyRuntimeAddr;
+      }
     }
   } else if (pyBinaryInfo.elfType == ET_DYN) {
     // Adjust by baseLoadAddr to convert file to memory addresses.

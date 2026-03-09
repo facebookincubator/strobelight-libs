@@ -57,6 +57,8 @@ std::ostream& operator<<(std::ostream& os, const OffsetConfig& offsets) {
      << "\n\t OffsetConfig.PyFrameObject_owner : "
      << offsets.PyFrameObject_owner
      << "\n\t OffsetConfig.PyGenObject_iframe : " << offsets.PyGenObject_iframe
+     << "\n\t OffsetConfig.PyDebugOffsets_free_threaded : "
+     << offsets.PyDebugOffsets_free_threaded
      << "\n\t OffsetConfig.PyVersion_major : " << offsets.PyVersion_major
      << "\n\t OffsetConfig.PyVersion_minor : " << offsets.PyVersion_minor
      << "\n\t OffsetConfig.PyVersion_micro : " << offsets.PyVersion_micro

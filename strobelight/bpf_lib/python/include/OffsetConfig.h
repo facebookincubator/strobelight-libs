@@ -48,6 +48,7 @@ struct OffsetConfig {
         PyVarObject_size(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyFrameObject_owner(BPF_LIB_DEFAULT_FIELD_OFFSET),
         PyGenObject_iframe(BPF_LIB_DEFAULT_FIELD_OFFSET),
+        PyDebugOffsets_free_threaded(BPF_LIB_DEFAULT_FIELD_OFFSET),
 
         PyVersion_major(0),
         PyVersion_minor(0),
@@ -95,6 +96,7 @@ typedef struct {
   uintptr_t PyVarObject_size;
   uintptr_t PyFrameObject_owner;
   uintptr_t PyGenObject_iframe;
+  uintptr_t PyDebugOffsets_free_threaded;
 
   int32_t PyVersion_major;
   int32_t PyVersion_minor;

@@ -55,6 +55,11 @@ struct {
 #define BPF_LIB_CO_ITERABLE_COROUTINE 0x0100
 #define BPF_LIB_CO_STATICALLY_COMPILED 0x4000000
 
+// Frame owner values >= 3 are entry frames that should be skipped.
+// Python 3.13: FRAME_OWNED_BY_CSTACK = 3
+// Python 3.14+: FRAME_OWNED_BY_INTERPRETER = 3, FRAME_OWNED_BY_CSTACK = 4
+#define BPF_LIB_FRAME_OWNED_BY_ENTRY_MIN 3
+
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, BPF_LIB_DEFAULT_MAP_SIZE);
@@ -91,6 +96,9 @@ struct sample_state_t {
   struct pystacks_symbol sym;
   struct pystacks_line_table linetable;
   int32_t lasti;
+  // Flag to indicate that the current frame was skipped (e.g., entry frame)
+  // and should not be added to the symbol buffer
+  bool skip_symbol;
 };
 
 struct {
@@ -155,6 +163,25 @@ static __always_inline void* get_gen_ptr(
           (char*)code_ptr + offsets->PyCodeObject_co_flags,
           task) < 0) {
     return NULL;
+  }
+
+  // Python 3.12+: detect generators via frame owner instead of f_gen field.
+  // Each generator has a python iframe that directly follows it; to get a
+  // genobject from an iframe, subtract the size of the iframe.
+  if (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 12) {
+    char frame_owner = 0;
+    int result = bpf_probe_read_user_task(
+        &frame_owner,
+        sizeof(char),
+        (char*)frame_ptr + offsets->PyFrameObject_owner,
+        task);
+
+    if (frame_owner == 1) {
+      gen_ptr = (char*)frame_ptr - offsets->PyGenObject_iframe;
+      return gen_ptr;
+    } else {
+      return NULL;
+    }
   }
 
   // We check code flag first for old style coroutines, f_gen only exists in PY3
@@ -398,6 +425,15 @@ static __always_inline void* get_code_ptr(
         sizeof(void*),
         (char*)frame_ptr + offsets->PyInterpreterFrame_code,
         task);
+
+    // Python 3.11+ tagged pointer handling:
+    // In Python 3.11+, f_executable (formerly f_code) uses _PyStackRef which
+    // can be a tagged pointer (low bit set). Entry frames created by
+    // _PyEval_EvalFrameDefault() have f_executable = PyStackRef_None, which
+    // is a tagged pointer to None. These frames don't have valid code objects.
+    if (result == 0 && ((uintptr_t)code_ptr & 1)) {
+      code_ptr = NULL;
+    }
   } else {
     result = bpf_probe_read_user_task(
         &code_ptr,
@@ -417,6 +453,51 @@ static __always_inline bool is_ending_frame(struct pystacks_symbol* sym) {
       NULL;
 }
 
+// Check if a frame is an entry frame that should be skipped.
+//
+// Entry frames are internal bookkeeping frames created by
+// _PyEval_EvalFrameDefault() to mark the boundary when entering the Python
+// interpreter from C code. In Python 3.13+, they have f_executable =
+// PyStackRef_None (a tagged pointer to None) and don't represent actual Python
+// function calls, so they must be skipped.
+//
+// In Python 3.12, entry frames (FRAME_OWNED_BY_CSTACK) have valid code objects
+// with co_qualname = "<interpreter trampoline>". These trampoline markers are
+// needed by the server-side mergeStacks() logic, so 3.12 entry frames must NOT
+// be skipped.
+//
+// We detect these by checking if frame_owner >=
+// BPF_LIB_FRAME_OWNED_BY_ENTRY_MIN (3):
+//   - Python 3.13: FRAME_OWNED_BY_CSTACK = 3
+//   - Python 3.14+: FRAME_OWNED_BY_INTERPRETER = 3, FRAME_OWNED_BY_CSTACK = 4
+static __always_inline bool is_entry_frame(
+    void* frame_ptr,
+    const OffsetConfig* const offsets,
+    struct task_struct* task) {
+  // Only check for Python 3.13+ which uses tagged pointers for f_executable
+  if (offsets->PyVersion_major < 3 || offsets->PyVersion_minor < 13) {
+    return false;
+  }
+
+  if (offsets->PyFrameObject_owner == BPF_LIB_DEFAULT_FIELD_OFFSET) {
+    return false;
+  }
+
+  char frame_owner = 0;
+  int result = bpf_probe_read_user_task(
+      &frame_owner,
+      sizeof(char),
+      (char*)frame_ptr + offsets->PyFrameObject_owner,
+      task);
+
+  if (result != 0) {
+    return false;
+  }
+
+  // owner >= 3 means entry frame (CSTACK in 3.13, INTERPRETER/CSTACK in 3.14)
+  return frame_owner >= BPF_LIB_FRAME_OWNED_BY_ENTRY_MIN;
+}
+
 /*
  * Read current PyFrameObject filename/name and update
  * stack_info->frame_ptr with pointer to next PyFrameObject
@@ -430,12 +511,68 @@ __noinline bool pystacks_get_frame_data(int pid) {
 
   const OffsetConfig* const offsets = &state->offsets;
 
+  // Reset skip_symbol flag at the start of each frame
+  state->skip_symbol = false;
+
   struct task_struct* task;
   if (get_task(pid, &task)) {
     return false;
   }
 
+  // Check for entry frames (owner >= BPF_LIB_FRAME_OWNED_BY_ENTRY_MIN).
+  // These are internal bookkeeping frames that don't have valid code objects.
+  // See is_entry_frame() for details.
+  if (is_entry_frame(state->frame_ptr, offsets, task)) {
+    // Mark this frame as skipped so the caller doesn't add it to the buffer
+    state->skip_symbol = true;
+
+    // Skip this frame and move to the next one
+    int ret_code;
+    if (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 11) {
+      ret_code = bpf_probe_read_user_task(
+          &state->frame_ptr,
+          sizeof(void*),
+          state->frame_ptr + offsets->PyInterpreterFrame_previous,
+          task);
+    } else {
+      ret_code = bpf_probe_read_user_task(
+          &state->frame_ptr,
+          sizeof(void*),
+          state->frame_ptr + offsets->PyFrameObject_back,
+          task);
+    }
+    put_task(task);
+    // Return true if we successfully moved to the next frame
+    // The caller will check skip_symbol and not add this to the buffer
+    return ret_code == 0;
+  }
+
   void* code_ptr = get_code_ptr(state->frame_ptr, offsets, task);
+
+  // Skip frames with invalid code pointers (e.g., tagged pointers in Python
+  // 3.11+ where f_executable has the low bit set). See get_code_ptr() for
+  // details on tagged pointer detection.
+  if (!code_ptr) {
+    state->skip_symbol = true;
+
+    // Move to the next frame
+    int ret_code;
+    if (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 11) {
+      ret_code = bpf_probe_read_user_task(
+          &state->frame_ptr,
+          sizeof(void*),
+          state->frame_ptr + offsets->PyInterpreterFrame_previous,
+          task);
+    } else {
+      ret_code = bpf_probe_read_user_task(
+          &state->frame_ptr,
+          sizeof(void*),
+          state->frame_ptr + offsets->PyFrameObject_back,
+          task);
+    }
+    put_task(task);
+    return ret_code == 0;
+  }
 
   get_names(state, state->frame_ptr, code_ptr, task);
 
@@ -581,7 +718,7 @@ static int set_py_stack_status(
   return 0;
 }
 
-__hidden int walk_and_load_py_stack(
+static __always_inline int walk_and_load_py_stack(
     struct pt_regs* ctx,
     struct task_struct* task) {
   struct pystacks_message* py_msg = pystacks_get_msg();
@@ -613,6 +750,10 @@ __hidden int walk_and_load_py_stack(
   for (; i < stack_max_len && i < BPF_LIB_MAX_STACK_DEPTH &&
        (last_frame_read = pystacks_get_frame_data(pid));
        ++i) {
+    // Skip entry frames (internal bookkeeping, no valid code object)
+    if (state->skip_symbol) {
+      continue;
+    }
     add_symbol_to_buffer(py_msg);
   }
 
@@ -654,7 +795,18 @@ static __always_inline void* get_frame_ptr(
     struct task_struct* task) {
   void* frame_ptr;
 
-  if (offsets->PyThreadState_frame != BPF_LIB_DEFAULT_FIELD_OFFSET) {
+  // Python 3.13+: uses PyThreadState->current_frame directly (no cframe)
+  if (offsets->PyThreadState_current_frame != BPF_LIB_DEFAULT_FIELD_OFFSET) {
+    if (bpf_probe_read_user_task(
+            &frame_ptr,
+            sizeof(void*),
+            (char*)thread_state + offsets->PyThreadState_current_frame,
+            task) < 0) {
+      frame_ptr = NULL;
+    }
+  }
+  // Pre-3.12: uses PyThreadState->frame directly
+  else if (offsets->PyThreadState_frame != BPF_LIB_DEFAULT_FIELD_OFFSET) {
     if (bpf_probe_read_user_task(
             &frame_ptr,
             sizeof(void*),
@@ -662,7 +814,9 @@ static __always_inline void* get_frame_ptr(
             task) < 0) {
       frame_ptr = NULL;
     }
-  } else {
+  }
+  // Python 3.12: uses PyThreadState->cframe->current_frame (two-step read)
+  else {
     if (bpf_probe_read_user_task(
             &frame_ptr,
             sizeof(void*),
@@ -780,7 +934,11 @@ static int get_thread_state_match(
   }
 }
 
-__hidden int pystacks_read_stacks_task(
+// Force-inline pystacks_read_stacks_task and walk_and_load_py_stack to avoid
+// exceeding BPF's MAX_CALL_FRAMES (8) limit. pystacks_read_stacks_global is a
+// global function (verified in isolation), so inlining these helpers keeps the
+// effective call depth under the limit.
+static __always_inline int pystacks_read_stacks_task(
     struct pt_regs* ctx,
     pid_t pid,
     struct task_struct* task) {
@@ -888,10 +1046,33 @@ __hidden int pystacks_read_stacks_task(
   return py_stack_size;
 }
 
-// global wrapper for verification
-// main function is to get and put the task around pystacks_read_stacks_task
-// call
-int pystacks_read_stacks_global(struct pt_regs* ctx, pid_t pid) {
+// Global BPF function: verified in isolation by the BPF verifier, saving
+// verification budget vs. being inlined at every call site.
+//
+// In sleepable mode, the ctx parameter is omitted because:
+// 1. Kernels older than 6.3 don't support __arg_ctx (needed for void* args
+//    in global functions), and the sleepable variant is tested on 5.19+.
+// 2. pt_regs are obtained internally via bpf_task_pt_regs() on the task
+//    acquired by get_task(), which is always non-NULL in sleepable mode.
+//
+// In non-sleepable mode, we use `void* ctx` instead of `struct pt_regs* ctx`
+// because __arg_ctx must work on aarch64 as well, where the struct name is
+// user_pt_regs.
+#ifdef STROBELIGHT_SLEEPABLE_BPF
+int pystacks_read_stacks_global(pid_t pid) {
+  struct task_struct* task;
+  if (get_task(pid, &task))
+    return 0;
+
+  struct pt_regs* regs = (struct pt_regs*)bpf_task_pt_regs(task);
+  int ret = pystacks_read_stacks_task(regs, pid, task);
+
+  put_task(task);
+
+  return ret;
+}
+#else
+int pystacks_read_stacks_global(void* ctx __arg_ctx, pid_t pid) {
   struct task_struct* task;
   if (get_task(pid, &task))
     return 0;
@@ -902,6 +1083,7 @@ int pystacks_read_stacks_global(struct pt_regs* ctx, pid_t pid) {
 
   return ret;
 }
+#endif
 
 // pystacks_read_stacks
 // return :
@@ -909,7 +1091,7 @@ int pystacks_read_stacks_global(struct pt_regs* ctx, pid_t pid) {
 //    <  0 - error
 // non-global function for verification of destination buffer
 __hidden int pystacks_read_stacks(
-    struct pt_regs* ctx,
+    void* bpf_ctx,
     struct task_struct* task,
     struct pystacks_message* py_msg_buffer) {
   // Get TGID in upper 32bit.
@@ -927,7 +1109,11 @@ __hidden int pystacks_read_stacks(
     return -PYSTACKS_ERROR; /* should never happen */
   }
 
-  int py_stack_size = pystacks_read_stacks_global(ctx, pid);
+#ifdef STROBELIGHT_SLEEPABLE_BPF
+  int py_stack_size = pystacks_read_stacks_global(pid);
+#else
+  int py_stack_size = pystacks_read_stacks_global(bpf_ctx, pid);
+#endif
 
   if (py_stack_size <= sizeof(*py_msg_buffer)) {
     bpf_probe_read_kernel(py_msg_buffer, py_stack_size, py_msg);

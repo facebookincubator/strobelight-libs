@@ -29,8 +29,7 @@ int on_py_event(struct bpf_perf_event_data* ctx) {
   /////////////////////////////////////////////////////////////////////////////
   // { Stack Reader Logic /////////////////////////////////////////////////////
   /////////////////////////////////////////////////////////////////////////////
-  int py_stack_size =
-      pystacks_read_stacks(&ctx->regs, NULL, &event->py_msg_buffer);
+  int py_stack_size = pystacks_read_stacks(ctx, NULL, &event->py_msg_buffer);
 
   event->buff_size += py_stack_size;
 

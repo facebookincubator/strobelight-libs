@@ -51,7 +51,7 @@ enum {
 };
 
 int pystacks_read_stacks(
-    struct pt_regs* ctx,
+    void* bpf_ctx,
     struct task_struct* task,
     struct pystacks_message* py_msg_buffer);
 

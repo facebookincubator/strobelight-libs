@@ -9,6 +9,9 @@ namespace facebook::strobelight::bpf_lib {
 // @dep=//strobelight/bpf_lib/python/discovery:cinder310_offset
 extern const OffsetConfig kCinder310OffsetConfig;
 
+// @dep=//strobelight/bpf_lib/python/discovery:py314_offset
+extern const OffsetConfig kPy314OffsetConfig;
+
 // @dep=//strobelight/bpf_lib/python/discovery:py312_offset
 extern const OffsetConfig kPy312OffsetConfig;
 

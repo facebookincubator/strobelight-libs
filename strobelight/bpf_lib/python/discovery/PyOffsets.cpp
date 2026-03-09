@@ -11,6 +11,10 @@ std::ostream& operator<<(std::ostream& os, const OffsetConfig& offsets) {
      << "\n\t OffsetConfig.PyTypeObject_name : " << offsets.PyTypeObject_name
      << "\n\t OffsetConfig.PyThreadState_frame : "
      << offsets.PyThreadState_frame
+     << "\n\t OffsetConfig.PyThreadState_cframe : "
+     << offsets.PyThreadState_cframe
+     << "\n\t OffsetConfig.PyThreadState_current_frame : "
+     << offsets.PyThreadState_current_frame
      << "\n\t OffsetConfig.PyThreadState_thread : "
      << offsets.PyThreadState_thread
      << "\n\t OffsetConfig.PyThreadState_interp : "

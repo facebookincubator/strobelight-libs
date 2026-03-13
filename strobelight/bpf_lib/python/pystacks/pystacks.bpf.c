@@ -428,11 +428,12 @@ static __always_inline void* get_code_ptr(
 
     // Python 3.11+ tagged pointer handling:
     // In Python 3.11+, f_executable (formerly f_code) uses _PyStackRef which
-    // can be a tagged pointer (low bit set). Entry frames created by
-    // _PyEval_EvalFrameDefault() have f_executable = PyStackRef_None, which
-    // is a tagged pointer to None. These frames don't have valid code objects.
+    // can be a tagged pointer (low bit set). Entry frames are already filtered
+    // out by is_entry_frame() before this function is called. In Python 3.14t
+    // (free-threaded builds), ALL valid code object pointers are tagged, so we
+    // must clear the low bit to recover the real pointer.
     if (result == 0 && ((uintptr_t)code_ptr & 1)) {
-      code_ptr = NULL;
+      code_ptr = (void*)((uintptr_t)code_ptr & ~1ULL);
     }
   } else {
     result = bpf_probe_read_user_task(

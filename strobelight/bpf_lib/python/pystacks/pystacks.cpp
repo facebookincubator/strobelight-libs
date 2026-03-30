@@ -240,6 +240,7 @@ void initPySymbols(
   long totalBPFSymbols = 0;
   long duplicateSymbols = 0;
   long missingQualnameRecoverySymbol = 0;
+  long missingFilenameRecoverySymbol = 0;
   struct pystacks_symbol* curSym = nullptr;
   struct pystacks_symbol nextSym = {};
   symbol_id_t id;
@@ -269,23 +270,30 @@ void initPySymbols(
       continue; // symbol already cached
     }
 
+    auto pidInfo = run->pidInfoCache_->get(nextSym.fault_pid);
+    bool isValidProc = pidInfo && pidInfo->isAlive();
+
     if (nextSym.qualname.fault_addr != 0) {
       // Attempt to read qualname again if a page fault occurred in bpf.
-      auto pidInfo = run->pidInfoCache_->get(nextSym.fault_pid);
-      if (pidInfo &&
-          pidInfo->readMemory(
-              nextSym.qualname.value,
-              (const void*)nextSym.qualname.fault_addr,
-              BPF_LIB_PYSTACKS_QUAL_NAME_LEN) > 0) {
-      } else {
+
+      if (!isValidProc) {
         strobelight_lib_print(
             STROBELIGHT_LIB_INFO,
             fmt::format(
                 "Failed to read qualname for symbol id {} at {:#x} in {}",
                 id,
                 nextSym.qualname.fault_addr,
-                pidInfo->getPid())
+                nextSym.fault_pid)
                 .c_str());
+        missingQualnameRecoverySymbol++;
+        continue; // no qualname - not useful
+
+      } else if (
+          pidInfo->readMemory(
+              nextSym.qualname.value,
+              (const void*)nextSym.qualname.fault_addr,
+              BPF_LIB_PYSTACKS_QUAL_NAME_LEN) > 0) {
+      } else {
         missingQualnameRecoverySymbol++;
         continue; // no qualname - not useful
       }
@@ -293,21 +301,23 @@ void initPySymbols(
 
     if (nextSym.filename.fault_addr != 0) {
       // Attempt to read filename again if a page fault occurred in bpf.
-      auto pidInfo = run->pidInfoCache_->get(nextSym.fault_pid);
-      if (pidInfo &&
-          pidInfo->readMemory(
-              nextSym.filename.value,
-              (const void*)nextSym.filename.fault_addr,
-              BPF_LIB_PYSTACKS_FILE_NAME_LEN) > 0) {
-      } else {
+      if (!isValidProc) {
         strobelight_lib_print(
             STROBELIGHT_LIB_INFO,
             fmt::format(
                 "Failed to read filename for symbol id {} at {:#x} in {}",
                 id,
-                nextSym.qualname.fault_addr,
-                pidInfo->getPid())
+                nextSym.filename.fault_addr,
+                nextSym.fault_pid)
                 .c_str());
+        missingFilenameRecoverySymbol++;
+      } else if (
+          pidInfo->readMemory(
+              nextSym.filename.value,
+              (const void*)nextSym.filename.fault_addr,
+              BPF_LIB_PYSTACKS_FILE_NAME_LEN) > 0) {
+      } else {
+        missingFilenameRecoverySymbol++;
         // still have qualname so not skipping symbol
       }
     }
@@ -364,6 +374,14 @@ void initPySymbols(
         fmt::format(
             "Unrecoverable qualname (even with fault_pid) for {} symbols.",
             missingQualnameRecoverySymbol)
+            .c_str());
+  }
+  if (missingFilenameRecoverySymbol > 0) {
+    strobelight_lib_print(
+        STROBELIGHT_LIB_INFO,
+        fmt::format(
+            "Unrecoverable filename (even with fault_pid) for {} symbols.",
+            missingFilenameRecoverySymbol)
             .c_str());
   }
   if (missingLinetables > 0) {

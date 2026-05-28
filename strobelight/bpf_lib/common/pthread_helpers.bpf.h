@@ -8,9 +8,4 @@
 
 void* get_pthread_specific_data_task(uint32_t key, struct task_struct* task);
 
-int probe_read_pthread_tls_slot(
-    uint32_t key,
-    void** value,
-    struct task_struct* task);
-
 #endif // __BPF_LIB_PTHREAD_HELPERS_H__

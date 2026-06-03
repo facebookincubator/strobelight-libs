@@ -91,7 +91,8 @@ __hidden bool does_tid_match_targets(struct task_struct* task) {
   return does_tid_match_targets_comm(comm);
 }
 
-__hidden bool profile_pid_task(pid_t pid, struct task_struct* task) {
+__hidden bool
+profile_pid_task(pid_t pid, struct task_struct* task, bool check_comm) {
   // For profilers that only target a single process (e.g. Crochet,
   // FunctionTracer) we can avoid the map lookup below, which is
   // beneficial for high-frequency events
@@ -99,13 +100,13 @@ __hidden bool profile_pid_task(pid_t pid, struct task_struct* task) {
     if (pid != pid_target_helpers_prog_cfg.targeted_pid) {
       return false;
     }
-    return does_tid_match_targets(task);
+    return !check_comm || does_tid_match_targets(task);
   }
   if (pid_target_helpers_prog_cfg.has_targeted_pids) {
     if (bpf_map_lookup_elem(&targeted_pids, &pid) == NULL) {
       return false;
     }
-    return does_tid_match_targets(task);
+    return !check_comm || does_tid_match_targets(task);
   }
 
   // ignore samples from strobelight itself
@@ -119,9 +120,9 @@ __hidden bool profile_pid_task(pid_t pid, struct task_struct* task) {
     return false;
   }
 
-  return does_tid_match_targets(task);
+  return !check_comm || does_tid_match_targets(task);
 }
 
 bool profile_pid(pid_t pid) {
-  return profile_pid_task(pid, bpf_get_current_task_btf());
+  return profile_pid_task(pid, bpf_get_current_task_btf(), true);
 };

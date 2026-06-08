@@ -19,21 +19,27 @@ namespace facebook::strobelight::bpf_lib::pid_info {
 // Resolving from proc maps is trickier than just resolving the main exe
 // directly, due to non-fixed load addresses. The basic algorithm used is as
 // follows:
-//   For each buildId/binary mapping in /proc/<pid>/maps get the entry
-//   with the lowest startAddr (ignoring shared and non-readable mappings);
-//   this should happen automatically because they are ordered this way.
+//   For each buildId/binary mapping in /proc/<pid>/maps we record the first
+//   non-shared, readable mapping for that binary (mappings are ordered by
+//   startAddr, so this is the lowest such mapping). This mapping is later
+//   used to anchor address resolution for that ELF file.
 //
-//   For the buildId iterate over all the ELF program headers and get the
-//   default load address (p_vaddr) and offset (p_offset) for the lowest
-//   loadable (LOAD) segment. They should be in this order already.
+//   To compute the 'slide'/base-load-address of a shared or relocatable
+//   binary we open the ELF file and iterate its program headers looking
+//   for the PT_LOAD segment that corresponds to this memory mapping. The
+//   match is done by comparing the page-aligned p_offset of each PT_LOAD
+//   to the page-aligned mm.fileOffset of the mapping (using p_align as
+//   the page size, defaulting to 1 when unset):
+//     (h.p_offset & ~(align - 1)) == (mm.fileOffset & ~(align - 1))
 //
-//   In order to compute the 'slide'/base-load-address of a shared or
-//   relocatable binary we will take the start address of the lowest
-//   memory mapping and subtract the fileOffset of the same memory mapping
-//   and then substract the difference between the p_vaddr and p_offset above:
-//   slide = (mmStartAddr - mmFileOffset) - (lowest p_vaddr - lowest p_offset)
+//   Once a matching PT_LOAD is found, the base-load-address is computed
+//   from that segment's (p_vaddr, p_offset) and the mapping's
+//   (startAddr, fileOffset):
+//     baseLoadAddress = mm.startAddr - h.p_vaddr + h.p_offset - mm.fileOffset
 //
-//   Most of the time mmFileOffset and lowest p_offset are the same.
+//   For ET_EXEC binaries the file is always loaded at its default load
+//   address regardless of mapping alignment padding, so baseLoadAddress
+//   is simply 0 and no PT_LOAD matching is needed.
 //
 //   Why?
 //   From the ELF spec: https://refspecs.linuxfoundation.org/elf/elf.pdf
@@ -46,15 +52,10 @@ namespace facebook::strobelight::bpf_lib::pid_info {
 //   a single constant value for any one executable or shared object in a given
 //   process."
 //
-//   This essentialy means that the base-load-address for each binary (within
-//   the context of a process) is the same for all of its memory mappings in
-//   order to maintain relative addressing. So all we have to do is find the
-//   lowest mapping for each binary, then subtract the fileOffset to get the
-//   absolute address that corresponds to file offset zero, then subtract the
-//   difference between the default load address (p_vaddr) and the fileOffset
-//   (p_offset) from the lowest LOAD segment to get the amount to substract
-//   from absolute virtual addresses to the virtual addresses in the
-//   ELF file.
+//   This essentially means that the base-load-address for each binary
+//   (within the context of a process) is the same for all of its memory
+//   mappings, so any single PT_LOAD whose file offset matches a mapping
+//   yields the correct slide for the entire ELF.
 //
 //   Note: Matching a memory mapping to the LOAD segment(s) in it is hard!
 //   You can have instances where multiple memory mappings contain a
@@ -82,9 +83,10 @@ namespace facebook::strobelight::bpf_lib::pid_info {
 //   There can be memory mappings with NO load segments e.g.
 //   7f621cd6d000-7f621cd6e000 ---p 002e2000 00:1b 129103448 libpython3.8.so.1.0
 //
-//   This is why we're just taking the first non-shared and readable mapping
-//   and matching it against the first LOAD segment instead of attempting to
-//   find the matching LOAD segment for each memory mapping.
+//   The page-aligned p_offset / mm.fileOffset comparison handles these
+//   cases: the first non-shared readable mapping for a binary will always
+//   correspond to some PT_LOAD whose page-aligned offset matches, and that
+//   single match is sufficient to derive the slide for the whole binary.
 //
 //   Note2: Memory Mappings backed by a file marked as (deleted) still resolve
 //   to the correct, original file when opening this file via the map_files path
@@ -382,18 +384,23 @@ MemoryMappingElfInfo::MemoryMappingElfInfo(
     // so let's not mess around with address adjustment.
     baseLoadAddress = 0;
   } else {
-    std::optional<Elf64_Addr> lowestVaddr = std::nullopt;
-    Elf64_Off lowestOffset = 0;
-
+    // Find the PT_LOAD whose page-aligned p_offset matches mm.fileOffset and
+    // use its (p_vaddr, p_offset) to compute the baseLoadAddress.
+    bool foundMatchingPhdr = false;
     elfFile->iterateProgramHeaders([&](const GElf_Phdr& h) {
       if (h.p_type == PT_LOAD) {
-        lowestVaddr = h.p_vaddr;
-        lowestOffset = h.p_offset;
+        const Elf64_Off align = h.p_align ? h.p_align : 1;
+        const Elf64_Off mask = ~(align - 1);
+        if ((h.p_offset & mask) != (mm.fileOffset & mask)) {
+          return false;
+        }
+        baseLoadAddress = mm.startAddr - h.p_vaddr + h.p_offset - mm.fileOffset;
+        foundMatchingPhdr = true;
         return true;
       }
       return false;
     });
-    if (!lowestVaddr) {
+    if (!foundMatchingPhdr) {
       strobelight_lib_print(
           STROBELIGHT_LIB_DEBUG,
           fmt::format(
@@ -403,9 +410,6 @@ MemoryMappingElfInfo::MemoryMappingElfInfo(
               (void*)mm.endAddr,
               pid)
               .c_str());
-    } else {
-      baseLoadAddress =
-          (mm.startAddr - mm.fileOffset) - (*lowestVaddr - lowestOffset);
     }
   }
 }

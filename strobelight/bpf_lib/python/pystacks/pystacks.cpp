@@ -74,6 +74,14 @@ static const re2::RE2 kProfilingStackMetadataRegex(
     ".*profiling.stack_metadata:.*#.*");
 static const re2::RE2 kValidPythonSymbolRegex(
     "[\\w\\s\\[\\]\\/\\\\\\:\\.\\-\\<\\>\\#]*");
+static const std::string kProfilingStackMetadataPrefix(
+    "profiling.stack_metadata");
+// fbcode exposes generic attribution helpers under a distinct module to avoid
+// colliding with IG Distillery's profiling.stack_metadata import path. Symbol
+// formatting remaps that module to the stack metadata prefix for PyPerf query
+// compatibility.
+static const std::string kProfilingStackMetadataFbcodeModule(
+    "profiling_stack_metadata.stack_metadata");
 
 template <typename T>
 inline bool lockedContains(
@@ -175,6 +183,9 @@ std::string getSymbolName(
   std::string moduleName = getModuleNameFromFileName(run, sym.filename.value);
   if (moduleName.empty()) {
     return qualname;
+  }
+  if (moduleName == kProfilingStackMetadataFbcodeModule) {
+    moduleName = kProfilingStackMetadataPrefix;
   }
   return fmt::format("{}:{}", moduleName, qualname);
 }

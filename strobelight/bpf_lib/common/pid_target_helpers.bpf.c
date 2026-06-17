@@ -37,6 +37,11 @@ volatile struct {
   bool has_exclude_comm;
   char include_comm[BPF_LIB_TASK_COMM_LEN];
   char exclude_comm[BPF_LIB_TASK_COMM_LEN];
+
+  // When set, only the main thread of each targeted process is profiled. A
+  // thread is the main thread when its TID equals its process PID (i.e.
+  // task->pid == task->tgid). Programmed from tid_targets.main_thread.
+  bool main_thread_only;
 } pid_target_helpers_prog_cfg = {};
 
 // Verifier-friendly bounded prefix compare. Returns true if `comm` starts with
@@ -82,6 +87,10 @@ __hidden bool does_tid_match_targets_comm(const char* comm) {
 }
 
 __hidden bool does_tid_match_targets(struct task_struct* task) {
+  // Main-thread filter: drop every non-main thread of the targeted process.
+  if (pid_target_helpers_prog_cfg.main_thread_only && !is_main_thread(task)) {
+    return false;
+  }
   if (!pid_target_helpers_prog_cfg.has_include_comm &&
       !pid_target_helpers_prog_cfg.has_exclude_comm) {
     return true;

@@ -31,6 +31,12 @@ static __always_inline bool is_kernel_thread(struct task_struct* task) {
           (BPF_LIB_PF_KTHREAD | BPF_LIB_PF_IDLE)) != 0;
 }
 
+// A thread is the "main thread" of its process when its kernel TID
+// (task->pid) equals the process TGID (task->tgid).
+static __always_inline bool is_main_thread(struct task_struct* task) {
+  return BPF_CORE_READ(task, pid) == BPF_CORE_READ(task, tgid);
+}
+
 unsigned int get_task_state(void* arg);
 
 #endif // __BPF_LIB_TASK_HELPERS_H__

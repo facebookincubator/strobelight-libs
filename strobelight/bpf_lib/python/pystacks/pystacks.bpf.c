@@ -131,7 +131,7 @@ static symbol_id_t get_py_symbol_id(struct pystacks_symbol* const sym) {
   }
 }
 
-static __always_inline void* get_gen_ptr(
+static __always_inline __attribute__((unused)) void* get_gen_ptr(
     void* frame_ptr,
     void* code_ptr,
     const OffsetConfig* const offsets,
@@ -156,7 +156,7 @@ static __always_inline void* get_gen_ptr(
   // genobject from an iframe, subtract the size of the iframe.
   if (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 12) {
     char frame_owner = 0;
-    int result = bpf_probe_read_user_task(
+    bpf_probe_read_user_task(
         &frame_owner,
         sizeof(char),
         (char*)frame_ptr + offsets->PyFrameObject_owner,

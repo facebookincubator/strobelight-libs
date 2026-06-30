@@ -6,10 +6,8 @@ struct task_struct* bpf_task_from_pid(s32 pid) __ksym __weak;
 void bpf_task_release(struct task_struct* p) __ksym __weak;
 
 __hidden int get_task(int pid, struct task_struct** task) {
-  struct task_struct* t;
-
 #ifdef STROBELIGHT_SLEEPABLE_BPF
-  t = bpf_task_from_pid(pid);
+  struct task_struct* t = bpf_task_from_pid(pid);
   if (!t) {
     /* failure, sleepable, NULL task means error, caller should bail out */
     *task = NULL;

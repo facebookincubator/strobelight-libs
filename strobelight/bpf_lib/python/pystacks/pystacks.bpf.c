@@ -74,20 +74,6 @@ struct {
   __type(value, struct pystacks_line_table);
 } pystacks_linetables SEC(".maps");
 
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, BPF_LIB_DEFAULT_MAP_SIZE);
-  __type(key, struct pystacks_symbol);
-  __type(value, int8_t);
-} pystacks_ending_frames SEC(".maps");
-
-struct {
-  __uint(type, BPF_MAP_TYPE_HASH);
-  __uint(max_entries, BPF_LIB_DEFAULT_MAP_SIZE);
-  __type(key, struct read_qualified_name);
-  __type(value, int8_t);
-} pystacks_ending_frame_qualnames SEC(".maps");
-
 struct sample_state_t {
   OffsetConfig offsets;
   uint64_t cur_cpu;
@@ -446,12 +432,6 @@ static __always_inline void* get_code_ptr(
     code_ptr = NULL;
   }
   return code_ptr;
-}
-
-static __always_inline bool is_ending_frame(struct pystacks_symbol* sym) {
-  return bpf_map_lookup_elem(&pystacks_ending_frames, sym) != NULL ||
-      bpf_map_lookup_elem(&pystacks_ending_frame_qualnames, &sym->qualname) !=
-      NULL;
 }
 
 // Check if a frame is an entry frame that should be skipped.

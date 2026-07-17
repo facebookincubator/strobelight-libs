@@ -11,7 +11,7 @@
 
 #include "strobelight/bpf_lib/python/include/OffsetConfig.h"
 
-typedef struct {
+struct PyPidData {
   OffsetConfig offsets;
   bool use_tls;
 
@@ -22,6 +22,6 @@ typedef struct {
   uintptr_t tls_key_addr; // virtual address of autoTLSkey for pthreads TLS
   uintptr_t gil_locked_addr; // virtual address of gil_locked
   uintptr_t gil_last_holder_addr; // virtual address of gil_last_holder
-} PyPidData;
+};
 
 #endif

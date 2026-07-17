@@ -41,14 +41,14 @@ struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, BPF_LIB_DEFAULT_MAP_SIZE);
   __type(key, pid_t);
-  __type(value, PyPidData);
+  __type(value, struct PyPidData);
 } pystacks_pid_config SEC(".maps");
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
   __uint(max_entries, BPF_LIB_DEFAULT_MAP_SIZE);
   __type(key, struct bpf_lib_binary_id);
-  __type(value, PyPidData);
+  __type(value, struct PyPidData);
 } pystacks_binaryid_config SEC(".maps");
 
 #define BPF_LIB_CO_COROUTINE 0x0080
@@ -748,7 +748,7 @@ static __always_inline int walk_and_load_py_stack(
 }
 
 static __always_inline void* get_thread_state(
-    PyPidData* pid_data,
+    struct PyPidData* pid_data,
     struct task_struct* task) {
   // Python sets the thread_state using pthread_setspecific with the key
   // stored in a global variable autoTLSkey: https://fburl.com/t6zrkein,
@@ -816,8 +816,10 @@ static __always_inline void* get_frame_ptr(
   return frame_ptr;
 }
 
-static __always_inline int
-get_pthread_id_match(void* thread_state, void* tls_base, PyPidData* pid_data) {
+static __always_inline int get_pthread_id_match(
+    void* thread_state,
+    void* tls_base,
+    struct PyPidData* pid_data) {
   if (thread_state == 0) {
     return PYSTACKS_PTHREAD_ID_THREAD_STATE_NULL;
   }
@@ -855,7 +857,7 @@ get_pthread_id_match(void* thread_state, void* tls_base, PyPidData* pid_data) {
 static __always_inline int get_gil_state(
     void* this_thread_state,
     void* global_thread_state,
-    PyPidData* pid_data,
+    struct PyPidData* pid_data,
     struct task_struct* task) {
   // Get information of GIL state
   if (pid_data->gil_locked_addr == 0 || pid_data->gil_last_holder_addr == 0) {
@@ -932,7 +934,7 @@ static __always_inline int pystacks_read_stacks_task(
   // Get inode and pid and filter by them
   const struct task_struct* cur_task = get_current_task(task);
 
-  PyPidData* pid_data = bpf_map_lookup_elem(&pystacks_pid_config, &pid);
+  struct PyPidData* pid_data = bpf_map_lookup_elem(&pystacks_pid_config, &pid);
   if (!pid_data) {
     struct bpf_lib_binary_id search_key;
     search_key.inode = BPF_CORE_READ(cur_task, mm, exe_file, f_inode, i_ino);

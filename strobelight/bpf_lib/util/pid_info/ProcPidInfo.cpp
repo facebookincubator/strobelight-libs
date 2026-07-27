@@ -114,12 +114,17 @@ static constexpr std::string_view kMemStatFormat = "{} kB";
 // Positions of various fields in /proc/[pid]/stat line
 // http://man7.org/linux/man-pages/man5/proc.5.html
 enum ProcStatFields {
+  PROC_STAT_FIELD_FLAGS = 9,
   PROC_STAT_FIELD_UTIME = 14,
   PROC_STAT_FIELD_STIME = 15,
   PROC_STAT_FIELD_NUM_THREADS = 20,
   PROC_STAT_FIELD_STARTTIME = 22,
   PROC_STAT_FIELD_RSS = 24
 };
+
+// PF_KTHREAD from the kernel's include/linux/sched.h; not exposed by any UAPI
+// header. Set on kernel threads and reported in the stat "flags" field.
+static constexpr unsigned kPfKthread = 0x00200000;
 
 namespace {
 std::string_view getLast(char ch, std::string_view line) {
@@ -132,6 +137,51 @@ std::string_view getLast(char ch, std::string_view line) {
     last = lastCh + 1;
   }
   return line.substr(last);
+}
+
+template <typename Func>
+bool forEachProcStatField(std::string_view statLine, Func&& func) {
+  // comm (field 2) can contain spaces and parens, so anchor on the last ')'.
+  auto commEnd = statLine.rfind(')');
+  if (commEnd == std::string_view::npos || commEnd + 2 > statLine.size()) {
+    return false;
+  }
+  std::string_view rest = statLine.substr(commEnd + 2);
+  size_t fieldNum = 3; // 'rest' begins at field 3 (state)
+  size_t pos = 0;
+  while (pos < rest.size()) {
+    while (pos < rest.size() && rest[pos] == ' ') {
+      ++pos;
+    }
+    size_t begin = pos;
+    while (pos < rest.size() && rest[pos] != ' ') {
+      ++pos;
+    }
+    if (begin == pos) {
+      break;
+    }
+    if (!func(fieldNum, rest.substr(begin, pos - begin))) {
+      break;
+    }
+    ++fieldNum;
+  }
+  return true;
+}
+
+bool hasKthreadFlag(std::string_view statLine) {
+  unsigned flags = 0;
+  bool parsedFlags = false;
+  auto parseStatus = [&](size_t fieldNum, std::string_view value) {
+    if (fieldNum != PROC_STAT_FIELD_FLAGS) {
+      return true;
+    }
+    parsedFlags =
+        std::from_chars(value.data(), value.data() + value.size(), flags).ec ==
+        std::errc{};
+    return false;
+  };
+  return forEachProcStatField(statLine, parseStatus) && parsedFlags &&
+      (flags & kPfKthread) != 0;
 }
 
 bool readSymlink(const std::string& linkname, std::string* filename) {
@@ -385,47 +435,21 @@ bool ProcPidInfo::testSigCgt(int signum) const {
   return testSig(sigcgt_, signum);
 }
 
-bool ProcPidInfo::isKernelProcessPid(
-    pid_t pid,
-    const fs::path& rootDir,
-    pid_t ppid) {
-  if (pid == 2 || pid == 0) {
+bool ProcPidInfo::isKernelProcessPid(pid_t pid, const fs::path& rootDir) {
+  // pid 0 (swapper/idle) has no /proc entry.
+  if (pid == 0) {
     return true;
   }
-  if (ppid == -1) {
-    // Determine parent pid, since none was provided.
-    auto path = getProcfsPathForPid(pid, "status", rootDir);
-    std::fstream fs(path, std::ios_base::in);
-    std::string line;
-    while (std::getline(fs, line)) {
-      if (line.starts_with(kPPidPrefix)) {
-        auto value = std::string_view(line).substr(0, kPPidPrefix.size());
-        value = getLast('\t', value);
-        if (value.empty()) {
-          return false;
-        }
-
-        if (!trimWhitespace(value)) {
-          return false;
-        }
-
-        pid_t targetValue = 0;
-        auto ec = std::from_chars(
-                      value.data(), value.data() + value.size(), targetValue)
-                      .ec;
-        if (ec != std::errc{}) {
-          return false;
-        }
-        ppid = targetValue;
-        break;
-      }
-    }
+  auto path = getProcfsPathForPid(pid, "stat", rootDir);
+  std::string raw;
+  if (!readFile(path, raw)) {
+    return false;
   }
-  return ppid == 2;
+  return hasKthreadFlag(raw);
 }
 
 bool ProcPidInfo::isKernelProcess() const {
-  return ppid_ == 2 || pid_ == 2 || pid_ == 0;
+  return pid_ == 0 || isKernelThread_;
 }
 
 std::optional<std::string> ProcPidInfo::getExe() const {
@@ -942,66 +966,54 @@ bool ProcPidInfo::readProcStat() {
     return false;
   }
 
-  // Process name can contain spaces and can be in brackets, for example
-  // "2200782 ((sd-pam)) S ..." So we need to find the last ')'
-  auto commEnd = raw.rfind(')');
-  if (commEnd == std::string::npos) {
-    return false;
-  }
-
-  // Split the rest of raw into fields. Start with field_idx set to 2 since we
-  // have already advanced by 2 fields.
-  size_t start = 0;
-  size_t field_idx = 2;
   static constexpr int kExpectedNumFields = 52;
-  static constexpr std::string_view delim{" "};
-  auto fields = std::string_view(raw).substr(commEnd + 2);
-  while (start < fields.size()) {
-    std::string_view value;
-    nextToken(fields, delim, start, value);
-    start += value.size() + 1;
-
-    // skip blanks.
-    if (value.empty()) {
-      continue;
-    }
-
-    // increment field_idx to represent the field we are currently evaluating.
-    ++field_idx;
-
-    // fixed fields
-    if (field_idx == PROC_STAT_FIELD_STARTTIME) {
-      static const long kClockTicks = ::sysconf(_SC_CLK_TCK);
-      int64_t starttime;
-      std::from_chars(value.data(), value.data() + value.size(), starttime);
-      startTimeAfterBoot_ = std::chrono::seconds(starttime / kClockTicks);
-    }
-
-    // Variable fields
-    if (field_idx == PROC_STAT_FIELD_UTIME) {
-      std::from_chars(value.data(), value.data() + value.size(), stats_.utime);
-    }
-
-    if (field_idx == PROC_STAT_FIELD_STIME) {
-      std::from_chars(value.data(), value.data() + value.size(), stats_.stime);
-    }
-
-    if (field_idx == PROC_STAT_FIELD_NUM_THREADS) {
-      std::from_chars(
-          value.data(), value.data() + value.size(), stats_.threadCount);
-    }
-
-    if (field_idx == PROC_STAT_FIELD_RSS) {
-      static const long kPageSize = ::sysconf(_SC_PAGESIZE);
-      std::from_chars(
-          value.data(), value.data() + value.size(), stats_.rssBytes);
-      stats_.rssBytes *= kPageSize;
-    }
-  }
-  if (field_idx != kExpectedNumFields) {
+  size_t lastFieldNum = 2;
+  if (!forEachProcStatField(raw, [&](size_t fieldNum, std::string_view value) {
+        lastFieldNum = fieldNum;
+        switch (fieldNum) {
+          case PROC_STAT_FIELD_FLAGS: {
+            unsigned flags = 0;
+            std::from_chars(value.data(), value.data() + value.size(), flags);
+            isKernelThread_ = (flags & kPfKthread) != 0;
+            break;
+          }
+          case PROC_STAT_FIELD_STARTTIME: {
+            static const long kClockTicks = ::sysconf(_SC_CLK_TCK);
+            int64_t starttime;
+            std::from_chars(
+                value.data(), value.data() + value.size(), starttime);
+            startTimeAfterBoot_ = std::chrono::seconds(starttime / kClockTicks);
+            break;
+          }
+          case PROC_STAT_FIELD_UTIME:
+            std::from_chars(
+                value.data(), value.data() + value.size(), stats_.utime);
+            break;
+          case PROC_STAT_FIELD_STIME:
+            std::from_chars(
+                value.data(), value.data() + value.size(), stats_.stime);
+            break;
+          case PROC_STAT_FIELD_NUM_THREADS:
+            std::from_chars(
+                value.data(), value.data() + value.size(), stats_.threadCount);
+            break;
+          case PROC_STAT_FIELD_RSS: {
+            static const long kPageSize = ::sysconf(_SC_PAGESIZE);
+            std::from_chars(
+                value.data(), value.data() + value.size(), stats_.rssBytes);
+            stats_.rssBytes *= kPageSize;
+            break;
+          }
+          default:
+            break;
+        }
+        return true;
+      })) {
     return false;
   }
-
+  if (lastFieldNum != kExpectedNumFields) {
+    return false;
+  }
   return true;
 }
 

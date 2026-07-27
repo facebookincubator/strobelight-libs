@@ -146,8 +146,7 @@ class ProcPidInfo {
 
   static bool isKernelProcessPid(
       pid_t pid,
-      const std::filesystem::path& rootDir = "",
-      pid_t ppid = -1);
+      const std::filesystem::path& rootDir = "");
   bool isKernelProcess() const;
   std::optional<std::string> getExe() const;
   const Stats& getStats() const;
@@ -332,6 +331,7 @@ class ProcPidInfo {
   const pid_t pid_;
   pid_t nspid_ = 0;
   pid_t ppid_;
+  bool isKernelThread_ = false;
   pid_t tgid_ = 0;
   pid_t nstgid_ = 0;
   uid_t uid_;

@@ -32,6 +32,6 @@ See blocks of code surrounded by "Stack Reader" comments in:\
 See the [CONTRIBUTING](CONTRIBUTING.md) file for how to help out.
 
 ## License
-This work is dual-licensed under BSD 2-clause license and GNU LGPL v2.1 license, as found in the LICENSE file. You can choose between one of them if you use this work.
+This work is dual-licensed under GNU LGPL v2.1 license and BSD-2-Clause license, as found in the LICENSE file. You can choose between one of them if you use this work.
 
-SPDX-License-Identifier: BSD-2-Clause OR LGPL-2.1
+SPDX-License-Identifier: BSD-2-Clause OR LGPL-2.1-only

@@ -30,9 +30,9 @@
 #error Unsupported architecture
 #endif
 
-#define IS_VALID_USER_SPACE_ADDRESS(addr)                 \
-  (((uintptr_t)addr) >= BPF_LIB_MIN_USER_SPACE_ADDRESS && \
-   ((uintptr_t)addr) <= BPF_LIB_MAX_USER_SPACE_ADDRESS)
+#define IS_VALID_USER_SPACE_ADDRESS(addr)                \
+  ((uintptr_t)(addr) - BPF_LIB_MIN_USER_SPACE_ADDRESS <= \
+   BPF_LIB_MAX_USER_SPACE_ADDRESS - BPF_LIB_MIN_USER_SPACE_ADDRESS)
 
 extern int32_t zero;
 

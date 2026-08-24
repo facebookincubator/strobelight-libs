@@ -1,4 +1,5 @@
 #!/bin/sh
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 
 sudo apt-get install -y linux-tools-common libelf-dev linux-libc-dev \
     clang libbpf-dev make pkg-config libfmt-dev libre2-dev libcap-dev \

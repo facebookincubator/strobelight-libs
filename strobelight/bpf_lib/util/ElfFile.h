@@ -65,7 +65,9 @@ class ElfFile {
     static_assert(
         std::is_standard_layout<T>::value && std::is_trivial<T>::value,
         "non-pod");
-    if (offset + sizeof(T) > fileMMapLength_) {
+    GElf_Off end;
+    if (__builtin_add_overflow(offset, sizeof(T), &end) ||
+        end > fileMMapLength_) {
       return nullptr;
     }
     return reinterpret_cast<T*>(fileMMap_ + offset);
@@ -84,8 +86,12 @@ class ElfFile {
       return nullptr;
     }
 
-    if (!(addr >= section.sh_addr &&
-          (addr + sizeof(T)) <= (section.sh_addr + section.sh_size))) {
+    GElf_Addr addrEnd;
+    GElf_Addr sectionEnd;
+    if (addr < section.sh_addr ||
+        __builtin_add_overflow(addr, sizeof(T), &addrEnd) ||
+        __builtin_add_overflow(section.sh_addr, section.sh_size, &sectionEnd) ||
+        addrEnd > sectionEnd) {
       return nullptr;
     }
 
@@ -95,7 +101,11 @@ class ElfFile {
       return &t;
     }
 
-    GElf_Off offset = section.sh_offset + (addr - section.sh_addr);
+    GElf_Off offset;
+    if (__builtin_add_overflow(
+            section.sh_offset, (addr - section.sh_addr), &offset)) {
+      return nullptr;
+    }
 
     return at<T>(offset);
   }

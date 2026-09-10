@@ -304,6 +304,7 @@ void initPySymbols(
               nextSym.qualname.value,
               (const void*)nextSym.qualname.fault_addr,
               BPF_LIB_PYSTACKS_QUAL_NAME_LEN) > 0) {
+        nextSym.qualname.value[sizeof(nextSym.qualname.value) - 1] = '\0';
       } else {
         missingQualnameRecoverySymbol++;
         continue; // no qualname - not useful
@@ -327,6 +328,7 @@ void initPySymbols(
               nextSym.filename.value,
               (const void*)nextSym.filename.fault_addr,
               BPF_LIB_PYSTACKS_FILE_NAME_LEN) > 0) {
+        nextSym.filename.value[sizeof(nextSym.filename.value) - 1] = '\0';
       } else {
         missingFilenameRecoverySymbol++;
         // still have qualname so not skipping symbol

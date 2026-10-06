@@ -55,10 +55,17 @@ struct {
 #define BPF_LIB_CO_ITERABLE_COROUTINE 0x0100
 #define BPF_LIB_CO_STATICALLY_COMPILED 0x4000000
 
-// Frame owner values >= 3 are entry frames that should be skipped.
-// Python 3.13: FRAME_OWNED_BY_CSTACK = 3
-// Python 3.14+: FRAME_OWNED_BY_INTERPRETER = 3, FRAME_OWNED_BY_CSTACK = 4
-#define BPF_LIB_FRAME_OWNED_BY_ENTRY_MIN 3
+// _PyInterpreterFrame.owner (enum _frameowner) in Python 3.12+.
+#define BPF_LIB_PY_FRAME_OWNED_BY_THREAD 0
+#define BPF_LIB_PY_FRAME_OWNED_BY_GENERATOR 1
+#define BPF_LIB_PY_FRAME_OWNED_BY_FRAME_OBJECT 2
+
+// Python 3.12 and 3.13.
+#define BPF_LIB_PY312_FRAME_OWNED_BY_CSTACK 3
+
+// Python 3.14+.
+#define BPF_LIB_PY314_FRAME_OWNED_BY_INTERPRETER 3
+#define BPF_LIB_PY314_FRAME_OWNED_BY_CSTACK 4
 
 struct {
   __uint(type, BPF_MAP_TYPE_HASH);
@@ -434,6 +441,19 @@ static __always_inline void* get_code_ptr(
   return code_ptr;
 }
 
+static __always_inline int get_interpreter_entry_frame_owner(
+    const OffsetConfig* const offsets) {
+  const int major = offsets->PyVersion_major;
+  const int minor = offsets->PyVersion_minor;
+  if (major == 3 && minor >= 14) {
+    return BPF_LIB_PY314_FRAME_OWNED_BY_INTERPRETER;
+  }
+  if (major == 3 && minor == 13) {
+    return BPF_LIB_PY312_FRAME_OWNED_BY_CSTACK;
+  }
+  return -1;
+}
+
 // Check if a frame is an entry frame that should be skipped.
 //
 // Entry frames are internal bookkeeping frames created by
@@ -448,7 +468,7 @@ static __always_inline void* get_code_ptr(
 // be skipped.
 //
 // We detect these by checking if frame_owner >=
-// BPF_LIB_FRAME_OWNED_BY_ENTRY_MIN (3):
+// get_interpreter_entry_frame_owner():
 //   - Python 3.13: FRAME_OWNED_BY_CSTACK = 3
 //   - Python 3.14+: FRAME_OWNED_BY_INTERPRETER = 3, FRAME_OWNED_BY_CSTACK = 4
 static __always_inline bool is_entry_frame(
@@ -475,8 +495,10 @@ static __always_inline bool is_entry_frame(
     return false;
   }
 
-  // owner >= 3 means entry frame (CSTACK in 3.13, INTERPRETER/CSTACK in 3.14)
-  return frame_owner >= BPF_LIB_FRAME_OWNED_BY_ENTRY_MIN;
+  const int interpreter_entry_frame_owner =
+      get_interpreter_entry_frame_owner(offsets);
+  return interpreter_entry_frame_owner != -1 &&
+      frame_owner >= interpreter_entry_frame_owner;
 }
 
 /*
@@ -500,7 +522,7 @@ __noinline bool pystacks_get_frame_data(int pid) {
     return false;
   }
 
-  // Check for entry frames (owner >= BPF_LIB_FRAME_OWNED_BY_ENTRY_MIN).
+  // Check for entry frames.
   // These are internal bookkeeping frames that don't have valid code objects.
   // See is_entry_frame() for details.
   if (is_entry_frame(state->frame_ptr, offsets, task)) {

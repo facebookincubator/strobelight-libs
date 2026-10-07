@@ -39,6 +39,11 @@ class IPyProcessDiscovery {
     }
   };
 
+  // Free-threaded builds carry a "t" suffix, e.g. "cpython-314t".
+  static bool isFreeThreadedPythonVersion(const std::string& pyVersion) {
+    return pyVersion.ends_with('t');
+  }
+
   /**
    * Update the PID configuration table in the BPF map.
    * @param mapFd File descriptor of the BPF map

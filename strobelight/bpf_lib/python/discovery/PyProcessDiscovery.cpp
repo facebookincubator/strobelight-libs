@@ -494,7 +494,7 @@ PyProcessDiscovery::getPyModuleInfo(
       const uint64_t* freeThreadedPtr = elf.getAddressValue<uint64_t>(
           pyRuntimeAddr + kPy314tOffsetConfig.PyDebugOffsets_free_threaded);
       if (freeThreadedPtr && *freeThreadedPtr != 0) {
-        if (pyVersion->empty() || pyVersion->back() != 't') {
+        if (!isFreeThreadedPythonVersion(*pyVersion)) {
           *pyVersion += "t";
         }
         strobelight_lib_print(

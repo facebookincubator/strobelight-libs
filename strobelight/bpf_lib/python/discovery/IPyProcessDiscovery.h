@@ -33,6 +33,7 @@ class IPyProcessDiscovery {
     int versionMajor;
     int versionMinor;
     int versionMicro;
+    bool freeThreaded = false;
 
     std::string version() {
       return fmt::format("{}.{}.{}", versionMajor, versionMinor, versionMicro);

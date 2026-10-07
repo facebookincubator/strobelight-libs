@@ -79,6 +79,7 @@ class PyProcessDiscovery : public facebook::strobelight::IPyProcessDiscovery {
     GElf_Half elfType;
     PyPidData pidData; // file addresses
     PyInterpreter interpreter;
+    bool freeThreaded = false;
   };
 
   struct PyModuleInfo {

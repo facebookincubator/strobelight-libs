@@ -251,6 +251,7 @@ PyProcessDiscovery::getPyRuntimeInfo(pid_t pid) const {
       .versionMajor = pyBinaryInfo->pidData.offsets.PyVersion_major,
       .versionMinor = pyBinaryInfo->pidData.offsets.PyVersion_minor,
       .versionMicro = pyBinaryInfo->pidData.offsets.PyVersion_micro,
+      .freeThreaded = pyBinaryInfo->freeThreaded,
   };
 }
 
@@ -588,12 +589,20 @@ PyProcessDiscovery::getPyModuleInfo(
     }
     data.use_tls = (data.tls_key_addr > 0);
 
+    const bool freeThreaded = isFreeThreadedPythonVersion(*pyVersion);
+    if (freeThreaded) {
+      strobelight_lib_print(
+          STROBELIGHT_LIB_INFO,
+          fmt::format("Free-threaded Python build {}: {}", *pyVersion, elfPath)
+              .c_str());
+    }
+
     moduleInfo.pyBinaryInfo = PyBinaryInfo{
         elfPath,
         elf.eType(),
         data,
-        strobeCodeRTPyCodeAddr ? PY_INTERPRETER_CINDER
-                               : PY_INTERPRETER_CPYTHON};
+        strobeCodeRTPyCodeAddr ? PY_INTERPRETER_CINDER : PY_INTERPRETER_CPYTHON,
+        freeThreaded};
     destOffsetResolver.mergeOffsetResolver(moduleInfo.offsetResolver);
     return moduleInfo.pyBinaryInfo;
   } // pythonModuleInfoCache_ wlock

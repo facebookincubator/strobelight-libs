@@ -422,9 +422,9 @@ static __always_inline void* get_code_ptr(
     // Python 3.11+ tagged pointer handling:
     // In Python 3.11+, f_executable (formerly f_code) uses _PyStackRef which
     // can be a tagged pointer (low bit set). Entry frames are already filtered
-    // out by is_entry_frame() before this function is called. In Python 3.14t
-    // (free-threaded builds), ALL valid code object pointers are tagged, so we
-    // must clear the low bit to recover the real pointer.
+    // out by get_entry_frame_owner() before this function is called. In
+    // Python 3.14t (free-threaded builds), ALL valid code object pointers are
+    // tagged, so we must clear the low bit to recover the real pointer.
     if (result == 0 && ((uintptr_t)code_ptr & 1)) {
       code_ptr = (void*)((uintptr_t)code_ptr & ~1ULL);
     }
@@ -454,34 +454,40 @@ static __always_inline int get_interpreter_entry_frame_owner(
   return -1;
 }
 
-// Check if a frame is an entry frame that should be skipped.
+// Owner of the frame if it is an entry frame, or -1 otherwise.
 //
-// Entry frames are internal bookkeeping frames created by
-// _PyEval_EvalFrameDefault() to mark the boundary when entering the Python
-// interpreter from C code. In Python 3.13+, they have f_executable =
-// PyStackRef_None (a tagged pointer to None) and don't represent actual Python
-// function calls, so they must be skipped.
+// Entry frames are bookkeeping frames created by _PyEval_EvalFrameDefault()
+// when C code enters the interpreter. In Python 3.13+ they have no code object
+// (f_executable is PyStackRef_None), so their names cannot be read.
 //
-// In Python 3.12, entry frames (FRAME_OWNED_BY_CSTACK) have valid code objects
-// with co_qualname = "<interpreter trampoline>". These trampoline markers are
-// needed by the server-side mergeStacks() logic, so 3.12 entry frames must NOT
-// be skipped.
+// In Python 3.12 the entry frame has a code object named
+// "<interpreter trampoline>", and the server-side mergeStacks() uses those
+// markers to tell which python frames each interpreter activation ran. On 3.14+
+// the FRAME_OWNED_BY_INTERPRETER entry frame is emitted as the same marker;
+// other entry frames are skipped. Python 3.13 gets no marker and its entry
+// frame (FRAME_OWNED_BY_CSTACK) is skipped.
 //
 // We detect these by checking if frame_owner >=
 // get_interpreter_entry_frame_owner():
 //   - Python 3.13: FRAME_OWNED_BY_CSTACK = 3
 //   - Python 3.14+: FRAME_OWNED_BY_INTERPRETER = 3, FRAME_OWNED_BY_CSTACK = 4
-static __always_inline bool is_entry_frame(
+static __always_inline int get_entry_frame_owner(
     void* frame_ptr,
     const OffsetConfig* const offsets,
     struct task_struct* task) {
   // Only check for Python 3.13+ which uses tagged pointers for f_executable
   if (offsets->PyVersion_major < 3 || offsets->PyVersion_minor < 13) {
-    return false;
+    return -1;
   }
 
   if (offsets->PyFrameObject_owner == BPF_LIB_DEFAULT_FIELD_OFFSET) {
-    return false;
+    return -1;
+  }
+
+  const int interpreter_entry_frame_owner =
+      get_interpreter_entry_frame_owner(offsets);
+  if (interpreter_entry_frame_owner == -1) {
+    return -1;
   }
 
   char frame_owner = 0;
@@ -491,14 +497,21 @@ static __always_inline bool is_entry_frame(
       (char*)frame_ptr + offsets->PyFrameObject_owner,
       task);
 
-  if (result != 0) {
-    return false;
+  if (result != 0 || frame_owner < interpreter_entry_frame_owner) {
+    return -1;
   }
+  return frame_owner;
+}
 
-  const int interpreter_entry_frame_owner =
-      get_interpreter_entry_frame_owner(offsets);
-  return interpreter_entry_frame_owner != -1 &&
-      frame_owner >= interpreter_entry_frame_owner;
+static __always_inline void set_interpreter_trampoline_symbol(
+    struct sample_state_t* const state) {
+  memset_zero(&state->sym, sizeof(struct pystacks_symbol));
+  memset_zero(&state->linetable, sizeof(struct pystacks_line_table));
+  state->lasti = -1;
+  __builtin_memcpy(
+      state->sym.qualname.value,
+      "<interpreter trampoline>",
+      sizeof("<interpreter trampoline>"));
 }
 
 /*
@@ -522,14 +535,16 @@ __noinline bool pystacks_get_frame_data(int pid) {
     return false;
   }
 
-  // Check for entry frames.
-  // These are internal bookkeeping frames that don't have valid code objects.
-  // See is_entry_frame() for details.
-  if (is_entry_frame(state->frame_ptr, offsets, task)) {
-    // Mark this frame as skipped so the caller doesn't add it to the buffer
-    state->skip_symbol = true;
+  const int entry_frame_owner =
+      get_entry_frame_owner(state->frame_ptr, offsets, task);
+  if (entry_frame_owner != -1) {
+    if (offsets->PyVersion_major == 3 && offsets->PyVersion_minor >= 14 &&
+        entry_frame_owner == BPF_LIB_PY314_FRAME_OWNED_BY_INTERPRETER) {
+      set_interpreter_trampoline_symbol(state);
+    } else {
+      state->skip_symbol = true;
+    }
 
-    // Skip this frame and move to the next one
     int ret_code;
     if (offsets->PyVersion_major >= 3 && offsets->PyVersion_minor >= 11) {
       ret_code = bpf_probe_read_user_task(
@@ -545,8 +560,6 @@ __noinline bool pystacks_get_frame_data(int pid) {
           task);
     }
     put_task(task);
-    // Return true if we successfully moved to the next frame
-    // The caller will check skip_symbol and not add this to the buffer
     return ret_code == 0;
   }
 

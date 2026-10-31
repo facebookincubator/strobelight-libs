@@ -31,6 +31,7 @@ Python 3.14t (free-threaded, no-GIL build):
 Items that no longer exist in 3.13+:
 - PyThreadState_cframe (removed, use PyThreadState_current_frame instead)
 - _PyCFrame_current_frame (removed, cframe struct no longer exists)
+- PyCoroObject_cr_awaiter (cr_ci_awaiter does not exist in 3.14t)
 
 Deprecated offsets (same as 3.12):
 - PyFrameObject_gen, replaced by runtime function _PyFrame_GetGenerator()
@@ -51,6 +52,8 @@ extern const OffsetConfig kPy314tOffsetConfig = [] {
       72; // offsetof(PyThreadState, current_frame)
   config.PyThreadState_thread = 152; // offsetof(PyThreadState, thread_id)
   config.PyThreadState_interp = 16; // offsetof(PyThreadState, interp)
+  config.PyInterpreterState_modules =
+      7720; // offsetof(PyInterpreterState, imports.modules)
 
   // PyInterpreterFrame offsets for Python 3.14t
   // Note: f_code renamed to f_executable, prev_instr renamed to instr_ptr
@@ -79,8 +82,7 @@ extern const OffsetConfig kPy314tOffsetConfig = [] {
   config.PyVersion_major = 3;
   config.PyVersion_minor = 14;
   config.PyVersion_micro = 3;
-  config.PyCoroObject_cr_awaiter = 80; // offsetof(PyCoroObject, cr_ci_awaiter)
-  config.PyGenObject_iframe = 96;
+  config.PyGenObject_iframe = 88; // offsetof(PyGenObject, gi_iframe)
   config.PyFrameObject_owner = 78; // offsetof(_PyInterpreterFrame, owner)
   config.PyDebugOffsets_free_threaded =
       16; // offsetof(_Py_DebugOffsets, free_threaded)

@@ -77,7 +77,9 @@ int PyLineTable::getLineForInstIndex310(int addrq) const {
   }
   uintptr_t offset = addrq * kPyCodeUnitSize;
 
-  // https://github.com/python/cpython/blob/3.10/Objects/lnotab_notes.txt#L57-L79
+  // Every entry is an address range, and a zero line delta keeps the previous
+  // line, as in PyLineTable_NextAddressRange() in
+  // https://github.com/python/cpython/blob/3.10/Objects/codeobject.c
   int line = firstLine_;
   uintptr_t start, end = 0;
 
@@ -91,10 +93,6 @@ int PyLineTable::getLineForInstIndex310(int addrq) const {
   for (size_t ii = 0; ii < entryCount; ++ii) {
     auto& entry = entries[ii];
 
-    if (entry.lineDelta == 0) {
-      end += entry.offsetDelta;
-      continue;
-    }
     start = end;
     end = start + entry.offsetDelta;
     if (entry.lineDelta == -128) {
@@ -102,10 +100,6 @@ int PyLineTable::getLineForInstIndex310(int addrq) const {
       continue;
     }
     line += entry.lineDelta;
-    if (end == start) {
-      // Empty range, omit.
-      continue;
-    }
     if (start <= offset && offset < end) {
       return line;
     }

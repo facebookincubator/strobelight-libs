@@ -245,7 +245,7 @@ PyProcessDiscovery::getPyRuntimeInfo(pid_t pid) const {
     return std::nullopt;
   }
 
-  return PyProcessDiscovery::PyRuntimeInfo{
+  PyProcessDiscovery::PyRuntimeInfo info{
       .interpreter = pyBinaryInfo->interpreter,
       .path = pidInfo->getProcfsRoot(pyBinaryInfo->path).string(),
       .versionMajor = pyBinaryInfo->pidData.offsets.PyVersion_major,
@@ -253,6 +253,10 @@ PyProcessDiscovery::getPyRuntimeInfo(pid_t pid) const {
       .versionMicro = pyBinaryInfo->pidData.offsets.PyVersion_micro,
       .freeThreaded = pyBinaryInfo->freeThreaded,
   };
+  if (pyBinaryInfo->versionHex) {
+    info.setVersion(*pyBinaryInfo->versionHex);
+  }
+  return info;
 }
 
 // Check if the given process is a Python process.
@@ -480,18 +484,33 @@ PyProcessDiscovery::getPyModuleInfo(
   const uintptr_t strobeCodeRTPyCodeAddr = getElfSymbolAddress(
       elf, elfPath, pySymbols.at(kStrobeCodeRTPyCodeSymblName));
 
-  // Detect free-threaded (no-GIL) Python builds via _Py_DebugOffsets.
+  // Read the runtime version and detect free-threaded (no-GIL) Python builds
+  // via _Py_DebugOffsets.
   // _PyRuntimeState starts with _Py_DebugOffsets whose layout is:
   //   char cookie[8]       @ offset 0   -- must be "xdebugpy"
   //   uint64_t version     @ offset 8   -- PY_VERSION_HEX
   //   uint64_t free_threaded @ offset 16 -- 0 (GIL) or 1 (no-GIL)
-  // Available in CPython 3.12+.
+  // Available in CPython 3.13+.
+  std::optional<uint64_t> pyVersionHex;
   if (pyVersion && pyRuntimeAddr) {
     static constexpr char kDebugCookie[] = "xdebugpy";
     static constexpr size_t kDebugCookieSize = 8;
+    static constexpr size_t kDebugVersionOffset = 8;
     const char* cookiePtr = elf.getAddressValue<char>(pyRuntimeAddr);
     if (cookiePtr &&
         std::memcmp(cookiePtr, kDebugCookie, kDebugCookieSize) == 0) {
+      const uint64_t* versionPtr =
+          elf.getAddressValue<uint64_t>(pyRuntimeAddr + kDebugVersionOffset);
+      if (versionPtr) {
+        pyVersionHex = *versionPtr;
+        strobelight_lib_print(
+            STROBELIGHT_LIB_INFO,
+            fmt::format(
+                "Read PY_VERSION_HEX {:#x} from _Py_DebugOffsets in {}",
+                *pyVersionHex,
+                elfPath)
+                .c_str());
+      }
       const uint64_t* freeThreadedPtr = elf.getAddressValue<uint64_t>(
           pyRuntimeAddr + kPy314tOffsetConfig.PyDebugOffsets_free_threaded);
       if (freeThreadedPtr && *freeThreadedPtr != 0) {
@@ -602,7 +621,8 @@ PyProcessDiscovery::getPyModuleInfo(
         elf.eType(),
         data,
         strobeCodeRTPyCodeAddr ? PY_INTERPRETER_CINDER : PY_INTERPRETER_CPYTHON,
-        freeThreaded};
+        freeThreaded,
+        pyVersionHex};
     destOffsetResolver.mergeOffsetResolver(moduleInfo.offsetResolver);
     return moduleInfo.pyBinaryInfo;
   } // pythonModuleInfoCache_ wlock

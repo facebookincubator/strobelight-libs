@@ -80,6 +80,8 @@ class PyProcessDiscovery : public facebook::strobelight::IPyProcessDiscovery {
     PyPidData pidData; // file addresses
     PyInterpreter interpreter;
     bool freeThreaded = false;
+    // PY_VERSION_HEX from _Py_DebugOffsets (3.13+)
+    std::optional<uint64_t> versionHex = std::nullopt;
   };
 
   struct PyModuleInfo {

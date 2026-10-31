@@ -3,6 +3,7 @@
 #pragma once
 
 #include <sys/types.h>
+#include <cstdint>
 #include <optional>
 #include <set>
 #include <string>
@@ -37,6 +38,13 @@ class IPyProcessDiscovery {
 
     std::string version() {
       return fmt::format("{}.{}.{}", versionMajor, versionMinor, versionMicro);
+    }
+
+    // PY_VERSION_HEX is 0xMMmmuuRS: major, minor, micro, release level, serial
+    void setVersion(uint64_t pyVersionHex) {
+      versionMajor = (pyVersionHex >> 24) & 0xff;
+      versionMinor = (pyVersionHex >> 16) & 0xff;
+      versionMicro = (pyVersionHex >> 8) & 0xff;
     }
   };
 

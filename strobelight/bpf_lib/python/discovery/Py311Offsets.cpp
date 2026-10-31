@@ -66,6 +66,8 @@ extern const OffsetConfig kPy311OffsetConfig = [] {
   config.PyCodeObject_linetable = 136; // offsetof(PyCodeObject, co_linetable)
   config.PyCodeObject_firstlineno =
       72; // offsetof(PyCodeObject, co_firstlineno)
+  config.PyCodeObject_code_adaptive =
+      184; // offsetof(PyCodeObject, co_code_adaptive)
 
   // Other object offsets
   config.PyTupleObject_item = 24; // offsetof(PyTupleObject, ob_item)

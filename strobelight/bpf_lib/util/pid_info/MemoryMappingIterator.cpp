@@ -3,7 +3,7 @@
 #include "strobelight/bpf_lib/util/pid_info/MemoryMappingIterator.h"
 
 #include <errno.h>
-#include <fmt/core.h>
+#include <fmt/format.h>
 #include <filesystem>
 #include <utility>
 
